@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>EL TÚNEL — Controlador</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="controller-page">
+  <main class="controller-shell">
+    <section id="joinPanel" class="controller-card">
+      <div class="eyebrow">CONTROLADOR</div>
+      <h1>EL TÚNEL</h1>
+      <label>Código de sala
+        <input id="codeInput" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="4821" class="code-input" />
+      </label>
+      <button id="joinBtn" class="primary full">CONECTAR</button>
+      <p id="joinError" class="error"></p>
+    </section>
+
+    <section id="controls" class="controls-panel hidden">
+      <div class="controller-topline">
+        <span id="controllerStatus" class="status connected">Conectado</span>
+        <span id="controllerRoom">Sala ----</span>
+      </div>
+      <p class="controller-instruction">Pulsa la dirección justo después del salto físico. Luego valida antes de que termine la ventana.</p>
+
+      <div class="control-grid">
+        <button data-action="left" class="jump-btn left">←<small>SALTO IZQUIERDA</small></button>
+        <button data-action="up" class="jump-btn up">↑<small>SALTO ARRIBA</small></button>
+        <button data-action="right" class="jump-btn right">→<small>SALTO DERECHA</small></button>
+      </div>
+
+      <button id="validateBtn" class="validate-btn" disabled>VALIDAR SALTO</button>
+      <div id="validationMeter" class="validation-meter"><i></i></div>
+      <p id="actionStatus" class="action-status">Esperando salto…</p>
+      <button id="pauseBtn" class="secondary full">PAUSA</button>
+    </section>
+  </main>
+  <script src="/controller.js"></script>
+</body>
+</html>

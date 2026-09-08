@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EL TÚNEL — Host</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="host-page">
+  <section id="setup" class="setup-shell">
+    <div class="setup-card">
+      <div class="eyebrow">CONFIGURAR EL TÚNEL</div>
+      <h1>EL TÚNEL</h1>
+      <p class="muted">No ver una salida no significa que no exista.</p>
+
+      <div class="room-panel">
+        <div>
+          <small>CÓDIGO DE SALA</small>
+          <div id="roomCode" class="room-code">----</div>
+        </div>
+        <div id="connectionBadge" class="status disconnected">Sin controlador</div>
+      </div>
+
+      <label>Nombre del jugador
+        <input id="playerName" maxlength="40" placeholder="Escribe un nombre" />
+      </label>
+
+      <div class="form-grid">
+        <label>Tiempo
+          <select id="duration">
+            <option value="120">2 minutos</option>
+            <option value="180" selected>3 minutos</option>
+            <option value="240">4 minutos</option>
+          </select>
+        </label>
+        <label>Dificultad
+          <select id="difficulty">
+            <option value="easy">Fácil</option>
+            <option value="medium" selected>Media</option>
+            <option value="hard">Difícil</option>
+          </select>
+        </label>
+        <label>Ayuda del público
+          <select id="audience">
+            <option value="on" selected>Activada</option>
+            <option value="off">Desactivada</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="setup-actions">
+        <button id="startBtn" class="primary">INICIAR TÚNEL</button>
+        <button id="demoBtn" class="secondary">MODO DEMO</button>
+      </div>
+      <p class="tiny">Meta: 500 puntos. El controlador registra el salto y lo valida dentro de una ventana breve.</p>
+    </div>
+  </section>
+
+  <main id="game" class="game-shell hidden">
+    <canvas id="tunnelCanvas"></canvas>
+    <div class="hud top-hud">
+      <div><small>PUNTOS</small><strong><span id="score">0</span> / 500</strong></div>
+      <div><small>TIEMPO</small><strong id="time">03:00</strong></div>
+      <div><small>FASE</small><strong id="phase">MUCHAS ALTERNATIVAS</strong></div>
+      <div><small>CONEXIÓN</small><strong id="gameConnection">SIN CONTROLADOR</strong></div>
+    </div>
+    <div id="playerTag" class="player-tag"></div>
+    <div id="floatScore" class="float-score"></div>
+    <div id="hint" class="hint">SALTA cuando una alternativa llegue a tu zona.</div>
+    <div class="lane-legend">
+      <span>← IZQUIERDA</span><span>↑ ARRIBA</span><span>DERECHA →</span>
+    </div>
+    <button id="quitBtn" class="ghost-button">FINALIZAR</button>
+  </main>
+
+  <section id="overlay" class="overlay hidden" aria-live="polite">
+    <div id="overlayCard" class="overlay-card"></div>
+  </section>
+
+  <script src="/host.js"></script>
+</body>
+</html>
