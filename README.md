@@ -1,83 +1,59 @@
 # EL TÚNEL
 
-Prototipo web interactivo para una campaña escolar de prevención del suicidio, centrado en la metáfora segura de **campo de visión limitado → menos alternativas percibidas → apoyo externo → interrupción → perspectiva más amplia**.
+Experiencia web interactiva para un taller escolar guiado de salud mental. Su metáfora central es:
 
-## Requisitos
+**campo de visión limitado → menos alternativas percibidas → apoyo externo → interrupción → perspectiva más amplia**
 
-- Node.js 18 o superior.
-- Computadora y teléfono conectados a la misma red Wi‑Fi/LAN.
-- Navegador moderno.
-
-No usa dependencias NPM externas.
+No es una herramienta clínica ni sustituye la atención profesional.
 
 ## Ejecutar
 
+Requiere Node.js 18 o superior y no usa dependencias externas.
+
 ```bash
-node server.js
+npm start
 ```
 
-Luego abre en la computadora:
+Abre `http://localhost:8080/host` en la computadora. El servidor mostrará en la consola la dirección de red que debe abrirse en el teléfono acompañante; la pantalla principal también la presenta junto al código de sala.
 
-```text
-http://localhost:8080/host
+Para verificar el servidor y el contrato de acciones:
+
+```bash
+npm test
 ```
 
-Para usar un teléfono en la misma red, identifica la IP LAN de la computadora (por ejemplo `192.168.1.20`) y abre:
+## Recorrido
 
-```text
-http://192.168.1.20:8080/control
-```
+1. El facilitador conecta el teléfono y completa la lista de seguridad.
+2. El participante y su acompañante ensayan izquierda, arriba y derecha.
+3. El participante responde con un paso, inclinación o micro-salto; el acompañante registra la misma dirección con un toque.
+4. El campo visual se estrecha gradualmente y algunas alternativas quedan fuera del foco frontal.
+5. La interrupción abre la perspectiva y revela que las alternativas continuaban allí.
+6. El facilitador conduce tres preguntas de cierre y presenta recursos de ayuda.
 
-Introduce en el teléfono el código de 4 dígitos mostrado por la pantalla principal.
+Todas las sesiones completan el recorrido. No existe un estado de derrota ni una puntuación mínima.
 
-## Controlador
+## Seguridad y accesibilidad
 
-1. El jugador realiza físicamente un salto a la izquierda, arriba o derecha.
-2. El segundo estudiante pulsa la dirección correspondiente.
-3. Debe pulsar **VALIDAR SALTO** antes de que finalice la ventana de 1 segundo.
-4. Si no valida a tiempo, la acción se descarta.
+- La actividad requiere una persona adulta facilitadora y un acompañante próximo.
+- El área debe estar despejada. El visor solo limita la visión periférica y siempre deja visibles el centro y el suelo.
+- La persona puede pausar o terminar cuando quiera y no tiene que compartir experiencias personales.
+- Existe un modo de movimiento reducido, activado automáticamente desde la preferencia del sistema y disponible también como control manual.
+- El sonido es opcional, empieza apagado y se genera localmente con Web Audio.
+- También puede probarse sin teléfono usando las flechas del teclado; la barra espaciadora pausa.
 
-El software no detecta el antifaz ni intenta detectar el movimiento físico; la validación la realiza el segundo estudiante.
+Antes de utilizar la experiencia con estudiantes, los textos y el protocolo presencial deben ser revisados por el profesional de salud mental de la institución.
 
-## Modo demo
+## Ayuda en Perú
 
-En la pantalla principal, selecciona **MODO DEMO**. Además del controlador móvil, puedes probar con:
+La interfaz muestra la **Línea 113, opción 5**, que ofrece orientación psicológica gratuita las 24 horas, y el acceso a los Centros de Salud Mental Comunitaria: <https://www.gob.pe/saludmental>.
 
-- Flecha izquierda: salto izquierda.
-- Flecha arriba: salto arriba.
-- Flecha derecha: salto derecha.
-- Espacio: pausa.
-- `I`: activar la secuencia de INTERRUPCIÓN.
-
-## Balance
-
-El modo estándar de 3 minutos genera:
-
-- Meta: 500 puntos.
-- 88 monedas puntuables.
-- 44 monedas de 5 puntos.
-- 31 monedas de 10 puntos.
-- 13 monedas de 15 puntos.
-- Total potencial: **725 puntos**.
-- 70 oportunidades temporales: 23 / 18 / 14 / 15 por fase. Varias oportunidades de las fases finales contienen grupos de monedas en la misma trayectoria.
-
-Esto permite mantener aproximadamente la distribución 50/35/15 y, a la vez, alcanzar el rango global de 700–770 puntos sin exigir una secuencia perfecta. Los puntos potenciales por fase son 150 / 160 / 125 / 290.
-
-## Nota de diseño sobre el documento fuente
-
-El documento solicita simultáneamente un total potencial de 700–770 puntos y, por fase, un número de oportunidades que —si cada oportunidad fuera exactamente una moneda de 5/10/15 puntos— no permite llegar a ese total. También indica 12–15 oportunidades y 280–300 puntos en la fase 4, lo cual no es posible con una sola moneda de máximo 15 puntos por oportunidad.
-
-El prototipo conserva el número aproximado de **oportunidades**, pero permite que algunas oportunidades sean **grupos de 2 monedas** en una misma trayectoria. Así se preserva el ritmo pedagógico y el balance global sin cambiar los valores 5/10/15.
+El facilitador puede añadir durante la preparación el nombre o ubicación del servicio de apoyo de su institución. Ese texto y el alias del participante permanecen únicamente en el navegador durante la sesión.
 
 ## Estructura
 
-- `server.js`: servidor HTTP + salas y eventos en memoria.
-- `public/host.html`: pantalla principal / proyector.
-- `public/controller.html`: controlador móvil.
-- `public/host.js`: motor del juego, balance, fases, interrupción y debriefing.
-- `public/controller.js`: conexión y validación de saltos.
-- `public/styles.css`: diseño responsive.
-
-## Producción
-
-Para un evento real, conviene ejecutar el servidor en una laptop conectada a un router local estable. Si se desea acceso por Internet, se puede desplegar detrás de HTTPS y reemplazar el polling HTTP por WebSocket; el prototipo actual prioriza cero dependencias y facilidad de uso en red local.
+- `server.js`: servidor HTTP, salas en memoria e información de red local.
+- `public/host.html` y `public/host.js`: preparación, Canvas, interrupción y debrief.
+- `public/controller.html` y `public/controller.js`: controlador móvil de un toque.
+- `public/styles.css`: sistema visual responsive y estados accesibles.
+- `server.test.js`: prueba mínima del servidor, la interfaz y las acciones.

@@ -1,5 +1,6 @@
 const http = require('http');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const url = require('url');
 
@@ -49,6 +50,18 @@ function ensureRoom(code) {
   return room;
 }
 
+function controllerUrls() {
+  const urls = [];
+  for (const addresses of Object.values(os.networkInterfaces())) {
+    for (const address of addresses || []) {
+      if (address.family === 'IPv4' && !address.internal) {
+        urls.push(`http://${address.address}:${PORT}/control`);
+      }
+    }
+  }
+  return urls;
+}
+
 function mime(file) {
   const ext = path.extname(file).toLowerCase();
   return ({
@@ -89,6 +102,10 @@ const server = http.createServer(async (req, res) => {
     return json(res, 201, { code });
   }
 
+  if (req.method === 'GET' && pathname === '/api/network') {
+    return json(res, 200, { controllerUrls: controllerUrls() });
+  }
+
   const joinMatch = pathname.match(/^\/api\/rooms\/(\d{4})\/join$/);
   if (req.method === 'POST' && joinMatch) {
     const room = ensureRoom(joinMatch[1]);
@@ -106,7 +123,7 @@ const server = http.createServer(async (req, res) => {
     if (!room) return json(res, 404, { error: 'Sala no encontrada' });
     try {
       const body = await readBody(req);
-      const allowed = new Set(['left', 'up', 'right', 'pause', 'validate', 'demo_interrupt']);
+      const allowed = new Set(['left', 'up', 'right', 'pause']);
       if (!allowed.has(body.action)) return json(res, 400, { error: 'Acción inválida' });
       room.controllerSeen = Date.now();
       room.seq += 1;
@@ -135,6 +152,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && statusMatch) {
     const room = ensureRoom(statusMatch[1]);
     if (!room) return json(res, 404, { error: 'Sala no encontrada' });
+    room.controllerSeen = Date.now();
     return json(res, 200, { controllerConnected: Date.now() - room.controllerSeen < 5000 });
   }
 
@@ -149,7 +167,11 @@ setInterval(() => {
   }
 }, 10 * 60 * 1000).unref();
 
-server.listen(PORT, HOST, () => {
-  console.log(`EL TÚNEL disponible en http://localhost:${PORT}`);
-  console.log(`En la red local, abre http://<IP-DE-ESTA-PC>:${PORT}`);
-});
+if (require.main === module) {
+  server.listen(PORT, HOST, () => {
+    console.log(`EL TÚNEL disponible en http://localhost:${PORT}`);
+    for (const controllerUrl of controllerUrls()) console.log(`Controlador: ${controllerUrl}`);
+  });
+}
+
+module.exports = { server };

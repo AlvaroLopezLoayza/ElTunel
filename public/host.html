@@ -3,79 +3,100 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>EL TÚNEL — Host</title>
+  <meta name="theme-color" content="#071416" />
+  <title>El Túnel — Facilitador</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body class="host-page">
   <section id="setup" class="setup-shell">
-    <div class="setup-card">
-      <div class="eyebrow">CONFIGURAR EL TÚNEL</div>
-      <h1>EL TÚNEL</h1>
-      <p class="muted">No ver una salida no significa que no exista.</p>
+    <header class="app-bar">
+      <a class="wordmark" href="/" aria-label="Volver al inicio"><span aria-hidden="true"></span>EL TÚNEL</a>
+      <div class="utility-actions">
+        <button class="utility-btn motion-toggle" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h3l2-6 4 12 2-6h5"/></svg><span>Movimiento normal</span></button>
+        <button class="utility-btn sound-toggle" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5ZM15 9a4 4 0 0 1 0 6M18 6a8 8 0 0 1 0 12"/></svg><span>Activar sonido</span></button>
+        <button class="utility-btn support-toggle" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v.01M9.7 9a2.4 2.4 0 1 1 3.7 2c-.9.5-1.4 1-1.4 2"/></svg><span>Ayuda</span></button>
+      </div>
+    </header>
 
-      <div class="room-panel">
-        <div>
-          <small>CÓDIGO DE SALA</small>
-          <div id="roomCode" class="room-code">----</div>
+    <main class="setup-layout">
+      <section class="setup-intro">
+        <p class="eyebrow">EXPERIENCIA 01 · CAMPO DE VISIÓN</p>
+        <h1>Entra al<br><span>túnel.</span></h1>
+        <p class="hero-line">No ver una salida no significa que no exista.</p>
+        <div class="consent-note">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 7v5c0 5 3.4 8 8 9 4.6-1 8-4 8-9V7l-8-4Z"/><path d="m9 12 2 2 4-4"/></svg>
+          <p><strong>Tú decides el ritmo.</strong> Puedes pausar o detenerte en cualquier momento. No tienes que compartir nada personal.</p>
         </div>
-        <div id="connectionBadge" class="status disconnected">Sin controlador</div>
-      </div>
+      </section>
 
-      <label>Nombre del jugador
-        <input id="playerName" maxlength="40" placeholder="Escribe un nombre" />
-      </label>
+      <section class="setup-card glass-panel" aria-labelledby="setupTitle">
+        <div class="step-heading"><span>01</span><div><p class="eyebrow">CONECTA</p><h2 id="setupTitle">Prepara la experiencia</h2></div></div>
+        <div class="pair-panel">
+          <div><small>CÓDIGO DE SALA</small><strong id="roomCode" class="room-code">----</strong></div>
+          <div class="pair-copy"><p>En el teléfono abre:</p><strong id="controllerUrl">Buscando dirección de red…</strong></div>
+          <span id="connectionBadge" class="status disconnected" role="status">Sin controlador</span>
+        </div>
 
-      <div class="form-grid">
-        <label>Tiempo
-          <select id="duration">
-            <option value="120">2 minutos</option>
-            <option value="180" selected>3 minutos</option>
-            <option value="240">4 minutos</option>
-          </select>
-        </label>
-        <label>Dificultad
-          <select id="difficulty">
-            <option value="easy">Fácil</option>
-            <option value="medium" selected>Media</option>
-            <option value="hard">Difícil</option>
-          </select>
-        </label>
-        <label>Ayuda del público
-          <select id="audience">
-            <option value="on" selected>Activada</option>
-            <option value="off">Desactivada</option>
-          </select>
-        </label>
-      </div>
+        <div class="step-heading compact"><span>02</span><div><p class="eyebrow">CUIDA</p><h2>Comprueba el espacio</h2></div></div>
+        <fieldset class="safety-list">
+          <legend class="sr-only">Lista de seguridad</legend>
+          <label><input class="safety-check" type="checkbox" /><span><i></i>El suelo está libre y el acompañante está cerca.</span></label>
+          <label><input class="safety-check" type="checkbox" /><span><i></i>El visor deja visibles el centro y el suelo.</span></label>
+          <label><input class="safety-check" type="checkbox" /><span><i></i>El participante sabe que puede pausar o salir.</span></label>
+        </fieldset>
 
-      <div class="setup-actions">
-        <button id="startBtn" class="primary">INICIAR TÚNEL</button>
-        <button id="demoBtn" class="secondary">MODO DEMO</button>
-      </div>
-      <p class="tiny">Meta: 500 puntos. El controlador registra el salto y lo valida dentro de una ventana breve.</p>
-    </div>
+        <label class="field">Alias del participante <small>Opcional; no uses el nombre completo.</small><input id="playerName" maxlength="24" autocomplete="off" placeholder="Ej. Sol" /></label>
+        <label class="field">Apoyo de la institución <small>Opcional; aparecerá al finalizar.</small><input id="institutionSupport" maxlength="100" autocomplete="off" placeholder="Ej. Psicología, aula 204" /></label>
+
+        <details class="experience-options">
+          <summary>Ajustar duración y ritmo</summary>
+          <div class="form-grid">
+            <label class="field">Duración<select id="duration"><option value="120">2 minutos</option><option value="180" selected>3 minutos</option><option value="240">4 minutos</option></select></label>
+            <label class="field">Ritmo<select id="difficulty"><option value="easy">Suave</option><option value="medium" selected>Equilibrado</option><option value="hard">Dinámico</option></select></label>
+          </div>
+        </details>
+
+        <p id="readyMessage" class="ready-message" role="status">Completa las tres comprobaciones y conecta el controlador.</p>
+        <button id="startBtn" class="primary full" disabled>ENSAYAR Y COMENZAR</button>
+        <button id="demoBtn" class="text-button">Probar sin teléfono</button>
+      </section>
+    </main>
   </section>
 
-  <main id="game" class="game-shell hidden">
-    <canvas id="tunnelCanvas"></canvas>
-    <div class="hud top-hud">
-      <div><small>PUNTOS</small><strong><span id="score">0</span> / 500</strong></div>
-      <div><small>TIEMPO</small><strong id="time">03:00</strong></div>
-      <div><small>FASE</small><strong id="phase">MUCHAS ALTERNATIVAS</strong></div>
-      <div><small>CONEXIÓN</small><strong id="gameConnection">SIN CONTROLADOR</strong></div>
+  <main id="game" class="game-shell hidden" aria-label="Experiencia El Túnel">
+    <canvas id="tunnelCanvas" aria-hidden="true"></canvas>
+    <header class="game-bar glass-strip">
+      <div class="game-stat discover-stat"><small>ALTERNATIVAS DESCUBIERTAS</small><strong id="discovered">0</strong></div>
+      <div class="game-stat"><small>TIEMPO</small><strong id="time">03:00</strong></div>
+      <div class="phase-stat"><small>RECORRIDO</small><strong id="phase">CAMPO ABIERTO</strong><div class="phase-track"><i id="phaseProgress"></i></div></div>
+      <span id="gameConnection" class="status disconnected">Sin controlador</span>
+    </header>
+    <div class="game-tools">
+      <button id="pauseBtn" class="round-tool" aria-label="Pausar experiencia"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14M15 5v14"/></svg></button>
+      <button class="round-tool sound-toggle" aria-label="Activar sonido" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5ZM15 9a4 4 0 0 1 0 6"/></svg></button>
+      <button class="round-tool motion-toggle" aria-label="Usar movimiento reducido" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h3l2-6 4 12 2-6h5"/></svg></button>
+      <button class="round-tool support-toggle" aria-label="Abrir ayuda"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v.01M9.7 9a2.4 2.4 0 1 1 3.7 2c-.9.5-1.4 1-1.4 2"/></svg></button>
     </div>
-    <div id="playerTag" class="player-tag"></div>
-    <div id="floatScore" class="float-score"></div>
-    <div id="hint" class="hint">SALTA cuando una alternativa llegue a tu zona.</div>
-    <div class="lane-legend">
-      <span>← IZQUIERDA</span><span>↑ ARRIBA</span><span>DERECHA →</span>
-    </div>
-    <button id="quitBtn" class="ghost-button">FINALIZAR</button>
+    <p id="playerTag" class="player-tag"></p>
+    <div id="floatScore" class="float-score" aria-hidden="true"></div>
+    <div id="hint" class="game-prompt glass-strip" aria-live="polite"><small>OBSERVA</small><strong>Muévete cuando una alternativa diga AHORA.</strong></div>
+    <div class="lane-legend" aria-hidden="true"><span>IZQUIERDA</span><span>ARRIBA</span><span>DERECHA</span></div>
+    <button id="quitBtn" class="quit-button">Finalizar experiencia</button>
   </main>
 
-  <section id="overlay" class="overlay hidden" aria-live="polite">
-    <div id="overlayCard" class="overlay-card"></div>
-  </section>
+  <section id="overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-label="Mensaje de la experiencia" aria-live="polite"><div id="overlayCard" class="overlay-card glass-panel"></div></section>
+
+  <dialog id="supportDialog" class="support-dialog glass-panel">
+    <form method="dialog">
+      <button class="dialog-close" aria-label="Cerrar ayuda"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+      <p class="eyebrow">AYUDA REAL · PERÚ</p>
+      <h2>No tienes que atravesarlo a solas.</h2>
+      <p id="institutionHelp">Habla ahora con el facilitador o con psicología/tutoría de tu institución.</p>
+      <a class="support-call" href="tel:113"><small>ORIENTACIÓN PSICOLÓGICA GRATUITA · 24 HORAS</small><strong>Línea 113 · opción 5</strong></a>
+      <a class="support-link" href="https://www.gob.pe/saludmental" target="_blank" rel="noreferrer">Ver Centros de Salud Mental Comunitaria</a>
+      <p class="tiny">Si existe peligro inmediato, avisa a un adulto y acude al servicio de emergencia más cercano.</p>
+    </form>
+  </dialog>
 
   <script src="/host.js"></script>
 </body>

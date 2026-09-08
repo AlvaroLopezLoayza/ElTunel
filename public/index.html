@@ -3,27 +3,33 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>EL TÚNEL</title>
+  <meta name="theme-color" content="#071416" />
+  <title>El Túnel — Experiencia interactiva</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
-<body class="landing">
-  <main class="landing-card">
-    <div class="eyebrow">EXPERIENCIA INTERACTIVA</div>
-    <h1>EL TÚNEL</h1>
-    <p class="lead">¿Puedes encontrar las alternativas que no siempre alcanzas a ver?</p>
-    <div class="landing-grid">
-      <a class="choice-card" href="/host">
-        <span class="choice-icon">▣</span>
-        <strong>Pantalla principal</strong>
-        <small>Computadora, laptop, proyector o pantalla gigante</small>
-      </a>
-      <a class="choice-card" href="/control">
-        <span class="choice-icon">↗</span>
-        <strong>Controlador</strong>
-        <small>Teléfono del segundo estudiante</small>
-      </a>
-    </div>
-    <p class="campaign-line">Las alternativas pueden existir aunque no podamos verlas.</p>
+<body class="landing-page">
+  <main class="landing-shell">
+    <section class="landing-hero glass-panel">
+      <div class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></div>
+      <p class="eyebrow">EXPERIENCIA INTERACTIVA · SALUD MENTAL</p>
+      <h1>El Túnel</h1>
+      <p class="hero-line">A veces las alternativas siguen ahí, aunque en ese momento no alcancemos a verlas.</p>
+
+      <nav class="entry-grid" aria-label="Elegir pantalla">
+        <a class="entry-card entry-primary" href="/host">
+          <span class="entry-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>
+          <span><small>FACILITADOR</small><strong>Abrir experiencia</strong><em>Configura la sala y proyecta el recorrido.</em></span>
+          <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+        </a>
+        <a class="entry-card" href="/control">
+          <span class="entry-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg></span>
+          <span><small>ACOMPAÑANTE</small><strong>Usar controlador</strong><em>Conecta un teléfono con el código de sala.</em></span>
+          <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+        </a>
+      </nav>
+
+      <p class="care-note">Una actividad escolar guiada. Nadie tiene que compartir una experiencia personal.</p>
+    </section>
   </main>
 </body>
 </html>

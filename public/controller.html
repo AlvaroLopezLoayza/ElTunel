@@ -2,39 +2,43 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>EL TÚNEL — Controlador</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#071416" />
+  <title>El Túnel — Controlador</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body class="controller-page">
   <main class="controller-shell">
-    <section id="joinPanel" class="controller-card">
-      <div class="eyebrow">CONTROLADOR</div>
-      <h1>EL TÚNEL</h1>
-      <label>Código de sala
-        <input id="codeInput" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="4821" class="code-input" />
-      </label>
+    <section id="joinPanel" class="controller-card glass-panel">
+      <div class="brand-mark small" aria-hidden="true"><i></i><i></i><i></i></div>
+      <p class="eyebrow">CONTROL DEL ACOMPAÑANTE</p>
+      <h1>Conecta con<br>el recorrido.</h1>
+      <p class="controller-copy">Escribe el código que aparece en la pantalla principal.</p>
+      <label class="field code-field">Código de sala<input id="codeInput" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="one-time-code" placeholder="4821" class="code-input" /></label>
       <button id="joinBtn" class="primary full">CONECTAR</button>
-      <p id="joinError" class="error"></p>
+      <p id="joinError" class="error" role="alert"></p>
     </section>
 
-    <section id="controls" class="controls-panel hidden">
-      <div class="controller-topline">
-        <span id="controllerStatus" class="status connected">Conectado</span>
-        <span id="controllerRoom">Sala ----</span>
-      </div>
-      <p class="controller-instruction">Pulsa la dirección justo después del salto físico. Luego valida antes de que termine la ventana.</p>
-
-      <div class="control-grid">
-        <button data-action="left" class="jump-btn left">←<small>SALTO IZQUIERDA</small></button>
-        <button data-action="up" class="jump-btn up">↑<small>SALTO ARRIBA</small></button>
-        <button data-action="right" class="jump-btn right">→<small>SALTO DERECHA</small></button>
+    <section id="controls" class="controls-panel hidden" aria-labelledby="controlTitle">
+      <header class="controller-topline glass-strip">
+        <span id="controllerStatus" class="status connected" role="status">Conectado</span>
+        <span id="controllerRoom" class="room-label">Sala ----</span>
+      </header>
+      <div class="controller-heading">
+        <p class="eyebrow">ACOMPAÑA</p>
+        <h1 id="controlTitle">Un toque.<br>Una dirección.</h1>
+        <p>Cuando veas el gesto del participante, toca la dirección correspondiente.</p>
       </div>
 
-      <button id="validateBtn" class="validate-btn" disabled>VALIDAR SALTO</button>
-      <div id="validationMeter" class="validation-meter"><i></i></div>
-      <p id="actionStatus" class="action-status">Esperando salto…</p>
-      <button id="pauseBtn" class="secondary full">PAUSA</button>
+      <div class="direction-pad" aria-label="Dirección del movimiento">
+        <button data-action="up" class="jump-btn up"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 38V10M12 22l12-12 12 12"/></svg><span>ARRIBA</span></button>
+        <button data-action="left" class="jump-btn left"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M38 24H10M22 12 10 24l12 12"/></svg><span>IZQUIERDA</span></button>
+        <button data-action="right" class="jump-btn right"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M10 24h28M26 12l12 12-12 12"/></svg><span>DERECHA</span></button>
+      </div>
+
+      <p id="actionStatus" class="action-status" aria-live="polite">Listo para acompañar.</p>
+      <button id="pauseBtn" class="secondary full pause-control"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14M15 5v14"/></svg><span>PAUSAR EXPERIENCIA</span></button>
+      <p class="controller-help">¿Alguien necesita apoyo? <a href="tel:113">Línea 113 · opción 5</a></p>
     </section>
   </main>
   <script src="/controller.js"></script>

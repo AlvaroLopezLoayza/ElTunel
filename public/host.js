@@ -1,10 +1,43 @@
-const $ = (s) => document.querySelector(s);
-const setup = $('#setup'), game = $('#game'), overlay = $('#overlay'), overlayCard = $('#overlayCard');
-const roomCodeEl = $('#roomCode'), connectionBadge = $('#connectionBadge');
-const startBtn = $('#startBtn'), demoBtn = $('#demoBtn'), quitBtn = $('#quitBtn');
-const canvas = $('#tunnelCanvas'), ctx = canvas.getContext('2d');
-const scoreEl = $('#score'), timeEl = $('#time'), phaseEl = $('#phase'), gameConnection = $('#gameConnection');
-const floatScore = $('#floatScore'), hint = $('#hint'), playerTag = $('#playerTag');
+const $ = selector => document.querySelector(selector);
+const $$ = selector => [...document.querySelectorAll(selector)];
+
+const setup = $('#setup');
+const game = $('#game');
+const overlay = $('#overlay');
+const overlayCard = $('#overlayCard');
+const supportDialog = $('#supportDialog');
+const roomCodeEl = $('#roomCode');
+const controllerUrlEl = $('#controllerUrl');
+const connectionBadge = $('#connectionBadge');
+const startBtn = $('#startBtn');
+const demoBtn = $('#demoBtn');
+const readyMessage = $('#readyMessage');
+const quitBtn = $('#quitBtn');
+const pauseBtn = $('#pauseBtn');
+const canvas = $('#tunnelCanvas');
+const ctx = canvas.getContext('2d');
+const discoveredEl = $('#discovered');
+const timeEl = $('#time');
+const phaseEl = $('#phase');
+const phaseProgress = $('#phaseProgress');
+const gameConnection = $('#gameConnection');
+const floatScore = $('#floatScore');
+const hint = $('#hint strong');
+const playerTag = $('#playerTag');
+const institutionInput = $('#institutionSupport');
+const motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
+
+const laneX = { left: -0.62, up: 0, right: 0.62 };
+const laneY = { left: 0.2, up: -0.5, right: 0.2 };
+const phaseNames = ['CAMPO ABIERTO', 'SEÑALES DISTANTES', 'VISIÓN DE TÚNEL', 'INTERRUPCIÓN'];
+const alternatives = [
+  'Reconocer cómo me siento', 'Escribir lo que siento', 'Respirar y tomar una pausa',
+  'Hablar con alguien', 'Acercarme a una persona de confianza', 'Aceptar conversar',
+  'Decir: necesito ayuda', 'Hablar con un familiar', 'Hablar con mi tutoría',
+  'Acercarme a un docente', 'Pedir que alguien me acompañe', 'Escuchar otra perspectiva',
+  'Hablar con psicología', 'Pedir ayuda profesional', 'Decírselo a un adulto',
+  'Buscar un lugar seguro', 'Llamar a una línea de ayuda', 'Acompañar sin juzgar'
+];
 
 let room = '';
 let seq = 0;
@@ -13,24 +46,38 @@ let gameState = null;
 let raf = 0;
 let lastFrame = 0;
 let lastAction = null;
-let pendingDirection = null;
 let paused = false;
+let supportWasPaused = false;
 let inInterruption = false;
+let revealMode = false;
+let reducedMotion = motionPreference.matches;
+let soundEnabled = false;
+let audioContext = null;
+let ambientGain = null;
 
-const laneX = { left: -0.58, up: 0, right: 0.58 };
-const laneY = { left: 0.22, up: -0.52, right: 0.22 };
-const labels = {
-  5: ['Reconocer cómo me siento','Escribir lo que siento','Hablar con alguien','Acercarme a una persona de confianza','Aceptar conversar'],
-  10: ['Decir: necesito ayuda','Hablar con un familiar','Hablar con mi tutor','Acercarme a un docente','Pedir que alguien me acompañe'],
-  15: ['Hablar con psicología','Pedir ayuda profesional','Decírselo a un adulto','Aceptar acompañamiento','Pedir ayuda para buscar apoyo']
-};
+function escapeHtml(value) {
+  return value.replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
+}
 
 async function createRoom() {
-  const res = await fetch('/api/rooms', { method: 'POST' });
-  const data = await res.json();
-  room = data.code;
-  roomCodeEl.textContent = room;
-  poll();
+  try {
+    const [roomRes, networkRes] = await Promise.all([
+      fetch('/api/rooms', { method: 'POST' }),
+      fetch('/api/network', { cache: 'no-store' })
+    ]);
+    const roomData = await roomRes.json();
+    const networkData = await networkRes.json();
+    room = roomData.code;
+    roomCodeEl.textContent = room;
+    const localHost = ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
+    controllerUrlEl.textContent = localHost && networkData.controllerUrls?.length
+      ? networkData.controllerUrls[0]
+      : `${location.origin}/control`;
+    poll();
+  } catch {
+    roomCodeEl.textContent = 'ERROR';
+    controllerUrlEl.textContent = 'Reinicia el servidor para crear una sala.';
+  }
 }
 
 async function poll() {
@@ -42,315 +89,569 @@ async function poll() {
       seq = data.seq;
       controllerConnected = data.controllerConnected;
       updateConnection();
-      for (const evt of data.events) handleEvent(evt);
+      data.events.forEach(handleEvent);
     }
-  } catch {}
-  setTimeout(poll, 220);
+  } catch {
+    controllerConnected = false;
+    updateConnection();
+  }
+  setTimeout(poll, 260);
 }
 
 function updateConnection() {
+  const label = controllerConnected ? 'Controlador conectado' : 'Sin controlador';
   connectionBadge.className = `status ${controllerConnected ? 'connected' : 'disconnected'}`;
-  connectionBadge.textContent = controllerConnected ? 'Controlador conectado' : 'Sin controlador';
-  gameConnection.textContent = controllerConnected ? 'CONECTADO' : 'SIN CONTROLADOR';
+  connectionBadge.textContent = label;
+  gameConnection.className = `status ${controllerConnected ? 'connected' : 'disconnected'}`;
+  gameConnection.textContent = label;
+  updateReadiness();
 }
 
-function handleEvent(evt) {
-  if (evt.type !== 'action' || !gameState || gameState.ended) return;
-  if (evt.action === 'pause') { paused = !paused; hint.textContent = paused ? 'PAUSA' : 'SALTA cuando una alternativa llegue a tu zona.'; return; }
-  if (['left','up','right'].includes(evt.action)) {
-    pendingDirection = { dir: evt.action, at: evt.at };
-    return;
-  }
-  if (evt.action === 'validate' && pendingDirection && Math.abs(evt.at - pendingDirection.at) <= 1200) {
-    registerJump(pendingDirection.dir);
-    pendingDirection = null;
-  }
+function updateReadiness() {
+  const checked = $$('.safety-check:checked').length;
+  const ready = checked === 3 && controllerConnected;
+  startBtn.disabled = !ready;
+  readyMessage.classList.toggle('ready', ready);
+  if (ready) readyMessage.textContent = 'Todo listo. Haz un ensayo breve antes de entrar.';
+  else if (checked < 3) readyMessage.textContent = `Completa las comprobaciones de seguridad (${checked}/3).`;
+  else readyMessage.textContent = 'Conecta el controlador para continuar.';
 }
 
-function phaseFor(progress) {
-  if (progress < .25) return 0;
-  if (progress < .50) return 1;
-  if (progress < .75) return 2;
-  return 3;
+function handleEvent(event) {
+  if (event.type !== 'action' || !gameState || gameState.ended) return;
+  if (event.action === 'pause') return togglePause();
+  if (['left', 'up', 'right'].includes(event.action)) registerGesture(event.action);
 }
 
-const phaseNames = ['MUCHAS ALTERNATIVAS','MENOS ALTERNATIVAS PERCIBIDAS','VISIÓN DE TÚNEL','INTERRUPCIÓN'];
+$$('.safety-check').forEach(check => check.addEventListener('change', updateReadiness));
+
+function showPractice(demo = false) {
+  if (!demo && startBtn.disabled) return;
+  setup.inert = true;
+  overlay.classList.remove('hidden');
+  overlayCard.innerHTML = `
+    <p class="eyebrow">ENSAYO · 20 SEGUNDOS</p>
+    <h2>Tres gestos.<br>Una señal clara.</h2>
+    <p>El participante elige un paso, una inclinación o un micro-salto. El acompañante toca la misma dirección una sola vez.</p>
+    <div class="gesture-preview">
+      <div><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M38 24H10M22 12 10 24l12 12"/></svg>IZQUIERDA</div>
+      <div><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 38V10M12 22l12-12 12 12"/></svg>ARRIBA</div>
+      <div><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M10 24h28M26 12l12 12-12 12"/></svg>DERECHA</div>
+    </div>
+    <p>Confirma que el centro y el suelo sean visibles con el visor. Deténganse ante cualquier incomodidad.</p>
+    <div class="overlay-actions"><button id="beginExperience" class="primary">ENTRAR AL TÚNEL</button></div>`;
+  $('#beginExperience').addEventListener('click', () => startGame(demo));
+  $('#beginExperience').focus();
+}
 
 function seeded(seed) {
-  let s = seed >>> 0;
-  return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+  let value = seed >>> 0;
+  return () => ((value = (value * 1664525 + 1013904223) >>> 0) / 4294967296);
 }
 
-function buildStandardPlan(duration, difficulty) {
-  // 70 oportunidades pedagógicas. Algunas contienen varias monedas en la misma trayectoria.
-  // Balance estándar: F1=150, F2=160, F3=125, F4=290; total=725 puntos.
-  // Distribución global: 44x5, 31x10, 13x15 = 88 monedas.
-  const rand = seeded(4821 + duration + ({easy:1,medium:7,hard:13}[difficulty] || 7));
-  const opportunityCounts = [23,18,14,15];
-  const phaseDistributions = [
-    { 5:18, 10:6,  15:0 },  // 24 monedas, 150 puntos
-    { 5:9,  10:10, 15:1 },  // 20 monedas, 160 puntos
-    { 5:11, 10:4,  15:2 },  // 17 monedas, 125 puntos
-    { 5:6,  10:11, 15:10 }  // 27 monedas, 290 puntos
-  ];
+function buildPlan(duration, difficulty) {
+  const rand = seeded(4821 + duration + ({ easy: 1, medium: 7, hard: 13 }[difficulty] || 7));
+  const count = Math.round(duration / 2.7);
   const plan = [];
   let id = 0;
 
-  for (let p = 0; p < 4; p++) {
-    const values = [];
-    for (const value of [5,10,15]) values.push(...Array(phaseDistributions[p][value]).fill(value));
-    for (let i = values.length - 1; i > 0; i--) {
-      const j = Math.floor(rand() * (i + 1));
-      [values[i], values[j]] = [values[j], values[i]];
-    }
-
-    const opp = opportunityCounts[p];
-    const bundles = Array(opp).fill(1);
-    for (let e = 0; e < values.length - opp; e++) bundles[(e * 3 + p) % opp]++;
-
-    let valueIdx = 0;
-    for (let i = 0; i < opp; i++) {
-      const phaseStart = p * duration / 4;
-      const phaseLen = duration / 4;
-      const t = phaseStart + 5 + (i / Math.max(1, opp - 1)) * (phaseLen - 9) + (rand() - .5) * 1.6;
-      let lane;
-      const r = rand();
-      if (p === 0) lane = r < .42 ? 'up' : r < .71 ? 'left' : 'right';
-      else if (p === 1) lane = r < .28 ? 'up' : r < .64 ? 'left' : 'right';
-      else lane = r < .18 ? 'up' : r < .59 ? 'left' : 'right';
-
-      for (let b = 0; b < bundles[i]; b++) {
-        const value = values[valueIdx++];
-        // En fases 2–4 las monedas de mayor valor tienden a laterales.
-        let coinLane = lane;
-        if (p > 0 && value === 15 && lane === 'up') coinLane = (i % 2 === 0 ? 'left' : 'right');
-        plan.push({
-          id: ++id, phase: p, spawnAt: t + b * .06, lane: coinLane, value,
-          label: labels[value][Math.floor(rand() * labels[value].length)],
-          z: 1.0 + b * .035, active: false, collected: false, missed: false,
-          peripheral: p > 0 && coinLane !== 'up' && (i % (p === 1 ? 3 : 2) === 0)
-        });
-      }
+  for (let phase = 0; phase < 4; phase++) {
+    const phaseCount = Math.floor(count / 4) + (phase < count % 4 ? 1 : 0);
+    const start = phase * duration / 4;
+    const length = duration / 4;
+    for (let index = 0; index < phaseCount; index++) {
+      const ratio = index / Math.max(1, phaseCount - 1);
+      const chance = rand();
+      const centerChance = [.5, .34, .18, .28][phase];
+      const lane = chance < centerChance ? 'up' : chance < centerChance + (1 - centerChance) / 2 ? 'left' : 'right';
+      plan.push({
+        id: ++id,
+        phase,
+        spawnAt: start + 3 + ratio * Math.max(2, length - 7) + (rand() - .5),
+        lane,
+        label: alternatives[(id * 5 + phase * 3) % alternatives.length],
+        kind: id % 3,
+        z: 1,
+        active: false,
+        collected: false,
+        missed: false
+      });
     }
   }
-
-  // INTERRUPCIÓN: no da puntos y aparece en la cuarta fase.
-  plan.push({ id: ++id, phase: 3, spawnAt: duration * .80, lane: 'up', value: 0, label: 'INTERRUPCIÓN', z: 1, active: false, collected: false, missed: false, special: true });
-  return plan.sort((a,b) => a.spawnAt - b.spawnAt);
+  return plan.sort((a, b) => a.spawnAt - b.spawnAt);
 }
 
 function startGame(demo = false) {
   const duration = Number($('#duration').value);
   const difficulty = $('#difficulty').value;
-  const name = $('#playerName').value.trim() || 'Jugador';
+  const name = $('#playerName').value.trim();
+  const institution = institutionInput.value.trim();
   gameState = {
-    duration, difficulty, name, score: 0, elapsed: 0, ended: false, demo,
-    coins: buildStandardPlan(duration, difficulty),
-    speed: difficulty === 'easy' ? .24 : difficulty === 'hard' ? .32 : .28,
+    duration,
+    difficulty,
+    name,
+    institution,
+    discovered: 0,
+    elapsed: 0,
+    ended: false,
+    demo,
+    coins: buildPlan(duration, difficulty),
+    speed: difficulty === 'easy' ? .23 : difficulty === 'hard' ? .31 : .27,
     interruptionDone: false
   };
-  scoreEl.textContent = '0';
+
+  discoveredEl.textContent = '0';
   timeEl.textContent = formatTime(duration);
   phaseEl.textContent = phaseNames[0];
-  playerTag.textContent = name;
-  setup.classList.add('hidden');
+  phaseProgress.style.width = '0%';
+  playerTag.textContent = name ? `RECORRIDO DE ${name}` : 'RECORRIDO EN CURSO';
+  updateInstitutionHelp(institution);
   overlay.classList.add('hidden');
+  setup.inert = false;
+  game.inert = false;
+  setup.classList.add('hidden');
   game.classList.remove('hidden');
-  paused = false; inInterruption = false; pendingDirection = null;
+  paused = false;
+  inInterruption = false;
+  revealMode = false;
   lastFrame = performance.now();
   cancelAnimationFrame(raf);
   raf = requestAnimationFrame(frame);
+  if (soundEnabled) startAmbientAudio();
 }
 
-function registerJump(dir) {
+function registerGesture(direction) {
   if (!gameState || gameState.ended || paused || inInterruption) return;
-  lastAction = { dir, until: performance.now() + 320 };
-  const candidates = gameState.coins.filter(c => c.active && !c.collected && !c.missed && c.lane === dir && c.z < .24 && c.z > -.03);
-  if (!candidates.length) { hint.textContent = 'Salto registrado. Sigue observando las alternativas.'; setTimeout(() => { if (!paused) hint.textContent='SALTA cuando una alternativa llegue a tu zona.'; }, 650); return; }
-  const targetGroupZ = candidates[0].z;
-  const caught = candidates.filter(c => Math.abs(c.z - targetGroupZ) < .07);
-  for (const coin of caught) collectCoin(coin);
+  lastAction = { direction, until: performance.now() + 420 };
+  const candidates = gameState.coins
+    .filter(coin => coin.active && !coin.collected && !coin.missed && coin.lane === direction && coin.z < .29 && coin.z > -.06)
+    .sort((a, b) => a.z - b.z);
+
+  if (!candidates.length) {
+    hint.textContent = 'Gesto recibido. Sigue observando.';
+    setTimeout(() => {
+      if (!paused && gameState && !gameState.ended) hint.textContent = 'Muévete cuando una alternativa diga AHORA.';
+    }, 700);
+    return;
+  }
+  collectAlternative(candidates[0]);
 }
 
-function collectCoin(coin) {
+function collectAlternative(coin) {
   coin.collected = true;
-  if (coin.special) { triggerInterruption(); return; }
-  gameState.score += coin.value;
-  scoreEl.textContent = gameState.score;
-  floatScore.textContent = `+${coin.value}`;
-  floatScore.classList.remove('pop'); void floatScore.offsetWidth; floatScore.classList.add('pop');
+  gameState.discovered += 1;
+  discoveredEl.textContent = gameState.discovered;
+  floatScore.textContent = 'ALTERNATIVA DESCUBIERTA';
+  floatScore.classList.remove('pop');
+  void floatScore.offsetWidth;
+  floatScore.classList.add('pop');
   hint.textContent = coin.label;
-  setTimeout(() => { if (!paused && !inInterruption) hint.textContent='SALTA cuando una alternativa llegue a tu zona.'; }, 900);
-  if (gameState.score >= 500) finish(true);
+  playPing(coin.kind);
+  setTimeout(() => {
+    if (!paused && !inInterruption && gameState && !gameState.ended) hint.textContent = 'Muévete cuando una alternativa diga AHORA.';
+  }, 1100);
 }
 
-function triggerInterruption() {
-  if (gameState.interruptionDone || gameState.ended) return;
+function togglePause() {
+  if (!gameState || gameState.ended || inInterruption || supportDialog.open) return;
+  paused = !paused;
+  pauseBtn.setAttribute('aria-label', paused ? 'Reanudar experiencia' : 'Pausar experiencia');
+  hint.textContent = paused ? 'La experiencia está en pausa.' : 'Muévete cuando una alternativa diga AHORA.';
+}
+
+function waitForContinue() {
+  return new Promise(resolve => $('#continueReflection').addEventListener('click', resolve, { once: true }));
+}
+
+async function triggerInterruption() {
+  if (!gameState || gameState.interruptionDone || gameState.ended) return;
   gameState.interruptionDone = true;
   inInterruption = true;
   paused = true;
-  showInterruptionSequence();
-}
-
-async function showInterruptionSequence() {
-  const steps = [
-    ['MIRA TODO LO QUE HABÍA.','Había alternativas fuera del campo de visión frontal.'],
-    ['LAS ALTERNATIVAS NO HABÍAN DESAPARECIDO.','La perspectiva limitada hacía más difícil percibirlas.'],
-    ['TU CAMPO DE VISIÓN SE HABÍA REDUCIDO.','Una visión más amplia permite notar más posibilidades.'],
-    ['A VECES NECESITAMOS INTERRUMPIR EL TÚNEL PARA VOLVER A VER LAS ALTERNATIVAS.','La ayuda externa puede ampliar nuestra perspectiva.']
-  ];
+  revealMode = true;
+  game.inert = true;
   overlay.classList.remove('hidden');
-  for (let i = 0; i < steps.length; i++) {
-    overlayCard.innerHTML = `<div class="eyebrow">INTERRUPCIÓN</div><h2>${steps[i][0]}</h2><p>${steps[i][1]}</p>${i === 3 ? '<div class="overlay-actions"><span class="option-chip">HABLAR</span><span class="option-chip">ACOMPAÑAR</span><span class="option-chip">PEDIR AYUDA</span></div><p>Pedir ayuda también es una forma de interrumpir el túnel.</p>' : ''}`;
-    await sleep(i === 3 ? 3300 : 2100);
+
+  const steps = [
+    ['INTERRUPCIÓN', 'Detente un momento.', 'Respira. Mira más allá del punto central.'],
+    ['OTRA PERSPECTIVA', 'Las alternativas seguían ahí.', 'El campo de visión se había reducido; las posibilidades no habían desaparecido.'],
+    ['CAMPO ABIERTO', 'No siempre tenemos que ver la salida a solas.', 'Hablar, acompañar y pedir ayuda pueden ampliar nuestra perspectiva.']
+  ];
+
+  for (let index = 0; index < steps.length; index++) {
     if (!gameState || gameState.ended) return;
+    const [eyebrow, title, copy] = steps[index];
+    overlayCard.innerHTML = `
+      <p class="eyebrow">${eyebrow} · ${index + 1}/${steps.length}</p>
+      <h2>${title}</h2><p>${copy}</p>
+      ${index === 1 ? '<div class="reveal-list"><span>HABLAR</span><span>ACOMPAÑAR</span><span>PEDIR AYUDA</span><span>ESCUCHAR</span></div>' : ''}
+      <div class="overlay-actions"><button id="continueReflection" class="primary">${index === steps.length - 1 ? 'CONTINUAR EL RECORRIDO' : 'CONTINUAR'}</button></div>`;
+    $('#continueReflection').focus();
+    await waitForContinue();
   }
+
   overlay.classList.add('hidden');
   paused = false;
   inInterruption = false;
-  hint.textContent = 'La perspectiva se amplió. Continúa.';
+  revealMode = false;
+  game.inert = false;
+  lastFrame = performance.now();
+  hint.textContent = 'Tu perspectiva se amplió. Continúa.';
 }
 
-function finish(success) {
+function finish() {
   if (!gameState || gameState.ended) return;
   gameState.ended = true;
   cancelAnimationFrame(raf);
+  stopAmbientAudio();
+  game.inert = false;
   game.classList.add('hidden');
   overlay.classList.remove('hidden');
-  const title = success ? 'SALIDA ENCONTRADA' : 'TIEMPO TERMINADO';
-  const intro = success
-    ? '<p class="big-line">No siempre tenemos que encontrarla solos.</p><p>A veces necesitamos que alguien nos ayude a verla.</p>'
-    : '<p class="big-line">¿Notaste que cada vez era más difícil encontrar las monedas?</p><p>Eso no significa necesariamente que hubiera menos alternativas. Significa que tu campo de visión era más limitado.</p><p>Cuando no podemos ver todas las opciones, pedir ayuda puede ayudarnos a ampliar la perspectiva.</p>';
+
+  const unseen = [...new Set(gameState.coins.filter(coin => !coin.collected).map(coin => coin.label))].slice(0, 6);
+  const revealed = unseen.length ? unseen : alternatives.slice(0, 6);
+  const institution = gameState.institution
+    ? escapeHtml(gameState.institution)
+    : 'Habla ahora con el facilitador o con psicología/tutoría de tu institución.';
+
   overlayCard.innerHTML = `
-    <div class="eyebrow">RESULTADO</div><h2>${title}</h2>${intro}
+    <p class="eyebrow">EL CAMPO SE ABRE</p>
+    <h2>Las alternativas<br>seguían ahí.</h2>
+    <p>Descubriste <strong>${gameState.discovered}</strong>. Estas son algunas de las que permanecían fuera del foco:</p>
+    <div class="reveal-list">${revealed.map(label => `<span>${label}</span>`).join('')}</div>
     <div class="debrief">
-      <strong>¿Qué ocurrió?</strong>
+      <p>CONVERSACIÓN GUIADA · NO HACE FALTA CONTAR ALGO PERSONAL</p>
       <ol>
-        <li>¿En qué momento te resultó más difícil encontrar monedas?</li>
-        <li>¿Qué sentías cuando tus compañeros te decían una dirección que tú no podías ver?</li>
-        <li>¿Qué ocurrió cuando apareció la perspectiva amplia?</li>
-        <li>¿Había realmente pocas monedas?</li>
-        <li>¿Qué cambió: las alternativas o tu capacidad para percibirlas?</li>
-        <li>¿Qué importancia tuvo escuchar a otras personas?</li>
+        <li>¿Qué cambió cuando el campo de visión se hizo más estrecho?</li>
+        <li>¿Cómo ayudó la perspectiva de la persona que acompañaba?</li>
+        <li>¿Qué puede ayudarnos a ampliar la perspectiva fuera del juego?</li>
       </ol>
     </div>
-    <p class="big-line">NO SIEMPRE TENEMOS QUE VER LA SALIDA SOLOS.</p>
-    <p>Hablar puede ayudar. Acompañar puede ayudar. Pedir ayuda puede ayudar.</p>
-    <p><strong>SI NO PUEDES VER TODAS LAS ALTERNATIVAS, NO TIENES QUE ENCONTRARLAS SOLO.</strong></p>
-    <div class="overlay-actions"><button id="again" class="primary">JUGAR DE NUEVO</button><button id="newPlayer" class="secondary">NUEVO JUGADOR</button></div>`;
-  $('#again').onclick = () => startGame(gameState.demo);
-  $('#newPlayer').onclick = () => { overlay.classList.add('hidden'); setup.classList.remove('hidden'); gameState = null; };
+    <div class="support-summary"><strong>AYUDA REAL</strong><p>${institution}</p><p>Línea 113, opción 5 · orientación psicológica gratuita, 24 horas.</p></div>
+    <p>No tienes que encontrar la salida a solas.</p>
+    <div class="overlay-actions"><button id="again" class="primary">REPETIR RECORRIDO</button><button id="newPlayer" class="secondary">PREPARAR OTRA PERSONA</button></div>`;
+
+  $('#again').addEventListener('click', () => startGame(gameState.demo));
+  $('#newPlayer').addEventListener('click', () => {
+    overlay.classList.add('hidden');
+    setup.inert = false;
+    setup.classList.remove('hidden');
+    gameState = null;
+  });
 }
 
 function resize() {
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  canvas.width = Math.floor(innerWidth * dpr); canvas.height = Math.floor(innerHeight * dpr);
-  canvas.style.width = innerWidth+'px'; canvas.style.height = innerHeight+'px';
-  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const dpr = Math.min(2, devicePixelRatio || 1);
+  canvas.width = Math.floor(innerWidth * dpr);
+  canvas.height = Math.floor(innerHeight * dpr);
+  canvas.style.width = `${innerWidth}px`;
+  canvas.style.height = `${innerHeight}px`;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
-window.addEventListener('resize', resize); resize();
 
 function drawTunnel(phase, elapsed) {
-  const w = innerWidth, h = innerHeight;
-  const g = ctx.createRadialGradient(w/2,h/2,30,w/2,h/2,Math.max(w,h)*.75);
-  const outer = ['#0d2a46','#132342','#171d3e','#16234d'][phase];
-  g.addColorStop(0,'#0d2038'); g.addColorStop(.55,outer); g.addColorStop(1,'#030810');
-  ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+  const width = innerWidth;
+  const height = innerHeight;
+  const centerX = width / 2;
+  const centerY = height * .51;
+  const opening = revealMode ? 1.12 : 1 - phase * .1;
+  const colors = [
+    ['#173e3a', '#071416'], ['#173430', '#071416'], ['#202b28', '#071112'], ['#273833', '#081617']
+  ][phase];
+  const background = ctx.createRadialGradient(centerX, centerY, 18, centerX, centerY, Math.max(width, height) * .78);
+  background.addColorStop(0, colors[0]);
+  background.addColorStop(.48, '#0d2425');
+  background.addColorStop(1, colors[1]);
+  ctx.fillStyle = background;
+  ctx.fillRect(0, 0, width, height);
 
-  const cx=w/2, cy=h*.52;
-  const rings = 14;
-  for(let i=0;i<rings;i++){
-    const t=(i/rings + (elapsed*.06)% (1/rings))%1;
-    const ease=t*t;
-    const rw=60 + ease*w*.86, rh=40 + ease*h*.72;
-    ctx.strokeStyle=`rgba(${phase<2?'92,186,255':'145,122,255'},${.08 + t*.15})`;
-    ctx.lineWidth=1.2;
-    ctx.beginPath(); ctx.roundRect(cx-rw/2,cy-rh/2,rw,rh,24+t*30); ctx.stroke();
+  ctx.save();
+  ctx.translate(centerX, centerY);
+  for (let index = 0; index < 13; index++) {
+    const travel = reducedMotion ? index / 13 : (index / 13 + elapsed * .035) % 1;
+    const depth = travel * travel;
+    const ringWidth = (66 + depth * width * .95) * opening;
+    const ringHeight = (44 + depth * height * .8) * opening;
+    ctx.strokeStyle = `rgba(${phase < 2 ? '183,243,74' : '255,143,120'},${.055 + travel * .115})`;
+    ctx.lineWidth = 1 + travel;
+    ctx.beginPath();
+    ctx.roundRect(-ringWidth / 2, -ringHeight / 2, ringWidth, ringHeight, 26 + travel * 42);
+    ctx.stroke();
   }
-  // Carriles discretos, visibles para el público.
-  ctx.strokeStyle='rgba(180,230,255,.08)'; ctx.lineWidth=1;
-  for (const dir of ['left','up','right']) {
-    const tx=cx + laneX[dir]*w*.38, ty=cy + laneY[dir]*h*.34;
-    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(tx,ty); ctx.stroke();
+  ctx.restore();
+
+  ctx.strokeStyle = 'rgba(235,246,234,.1)';
+  ctx.lineWidth = 1;
+  for (const direction of ['left', 'up', 'right']) {
+    const targetX = centerX + laneX[direction] * width * .42;
+    const targetY = centerY + laneY[direction] * height * .36;
+    ctx.beginPath();
+    ctx.moveTo(centerX, centerY);
+    ctx.quadraticCurveTo((centerX + targetX) / 2, centerY + 30, targetX, targetY);
+    ctx.stroke();
   }
-  // Vignette moderada: nunca horror/negro total.
-  const vignette = ctx.createRadialGradient(cx,cy,Math.min(w,h)*(.22 - phase*.02),cx,cy,Math.max(w,h)*(.72 - phase*.03));
-  vignette.addColorStop(0,'rgba(0,0,0,0)'); vignette.addColorStop(1,`rgba(0,5,15,${.18+phase*.05})`);
-  ctx.fillStyle=vignette; ctx.fillRect(0,0,w,h);
+
+  const particleCount = 22;
+  for (let index = 0; index < particleCount; index++) {
+    const drift = reducedMotion ? 0 : elapsed * (2 + index % 3);
+    const x = (index * 173 + drift) % (width + 80) - 40;
+    const y = (index * 97 + Math.sin(index) * 40) % height;
+    ctx.fillStyle = `rgba(236,246,232,${.05 + (index % 4) * .018})`;
+    ctx.beginPath();
+    ctx.arc(x, y, 1 + index % 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const edgeStrength = revealMode ? .12 : .22 + phase * .1;
+  const vignette = ctx.createRadialGradient(centerX, centerY, Math.min(width, height) * (.24 * opening), centerX, centerY, Math.max(width, height) * .68);
+  vignette.addColorStop(0, 'rgba(0,0,0,0)');
+  vignette.addColorStop(1, `rgba(1,8,9,${edgeStrength})`);
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, width, height);
+
+  if (revealMode) drawRevealedAlternatives(centerX, centerY, width, height);
 }
 
-function drawCoin(c) {
-  const w=innerWidth,h=innerHeight,cx=w/2,cy=h*.52;
-  const depth = 1 - c.z;
-  const scale = .18 + depth*1.35;
-  const x = cx + laneX[c.lane] * w * .34 * scale;
-  const y = cy + laneY[c.lane] * h * .31 * scale;
-  const r = 9 + 27*scale;
+function drawRevealedAlternatives(centerX, centerY, width, height) {
+  for (let index = 0; index < 18; index++) {
+    const angle = (index / 18) * Math.PI * 2;
+    const radius = Math.min(width, height) * (.28 + (index % 4) * .045);
+    const x = centerX + Math.cos(angle) * radius * 1.5;
+    const y = centerY + Math.sin(angle) * radius;
+    ctx.fillStyle = index % 2 ? 'rgba(183,243,74,.34)' : 'rgba(255,143,120,.32)';
+    ctx.beginPath();
+    ctx.arc(x, y, 4 + index % 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawCoin(coin) {
+  const width = innerWidth;
+  const height = innerHeight;
+  const centerX = width / 2;
+  const centerY = height * .51;
+  const approach = coin.z <= .29 ? 'AHORA' : coin.z <= .55 ? 'CERCA' : 'LEJOS';
+  let x;
+  let y;
+  let radius;
+
+  if (reducedMotion) {
+    x = centerX + laneX[coin.lane] * width * .3;
+    y = centerY + laneY[coin.lane] * height * .28;
+    radius = approach === 'AHORA' ? 34 : approach === 'CERCA' ? 27 : 21;
+  } else {
+    const depth = 1 - coin.z;
+    const scale = .16 + depth * 1.35;
+    x = centerX + laneX[coin.lane] * width * .34 * scale;
+    y = centerY + laneY[coin.lane] * height * .31 * scale;
+    radius = 10 + 24 * scale;
+  }
+
   ctx.save();
-  ctx.translate(x,y);
-  const pulse = 1 + Math.sin(performance.now()/180 + c.id)*.05;
-  ctx.scale(pulse,pulse);
-  ctx.shadowBlur = c.special ? 34 : 20;
-  ctx.shadowColor = c.special ? '#ffffff' : c.value===15 ? '#b493ff' : c.value===10 ? '#55e5dc' : '#65b6ff';
-  ctx.fillStyle = c.special ? 'rgba(245,251,255,.96)' : c.value===15 ? '#9b7bff' : c.value===10 ? '#53e5dc' : '#4e9cff';
-  ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
-  ctx.shadowBlur=0;
-  ctx.fillStyle = c.special ? '#13233b' : '#041522';
-  ctx.font = `900 ${Math.max(10,r*.55)}px system-ui`;
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(c.special ? 'I' : `+${c.value}`,0,0);
+  ctx.translate(x, y);
+  ctx.shadowBlur = approach === 'AHORA' ? 30 : 16;
+  ctx.shadowColor = coin.kind === 0 ? '#b7f34a' : coin.kind === 1 ? '#ff8f78' : '#76ddd2';
+  ctx.fillStyle = coin.kind === 0 ? '#b7f34a' : coin.kind === 1 ? '#ff8f78' : '#76ddd2';
+  ctx.beginPath();
+  if (coin.kind === 1) {
+    ctx.rotate(Math.PI / 4);
+    ctx.roundRect(-radius * .72, -radius * .72, radius * 1.44, radius * 1.44, radius * .28);
+  } else {
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+  }
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = '#10201c';
+  ctx.lineWidth = Math.max(2, radius * .09);
+  ctx.beginPath();
+  ctx.moveTo(-radius * .28, 0);
+  ctx.lineTo(radius * .28, 0);
+  ctx.moveTo(0, -radius * .28);
+  ctx.lineTo(0, radius * .28);
+  ctx.stroke();
   ctx.restore();
+
+  if (coin.z <= .55) {
+    ctx.save();
+    ctx.font = `800 ${approach === 'AHORA' ? 12 : 10}px system-ui`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const labelWidth = ctx.measureText(approach).width + 20;
+    ctx.fillStyle = approach === 'AHORA' ? 'rgba(255,248,236,.96)' : 'rgba(7,20,22,.82)';
+    ctx.beginPath();
+    ctx.roundRect(x - labelWidth / 2, y - radius - 29, labelWidth, 21, 11);
+    ctx.fill();
+    ctx.fillStyle = approach === 'AHORA' ? '#071416' : '#fff8ec';
+    ctx.fillText(approach, x, y - radius - 18.5);
+    ctx.restore();
+  }
 }
 
 function frame(now) {
   if (!gameState || gameState.ended) return;
-  const dt = Math.min(.04, (now-lastFrame)/1000 || 0); lastFrame=now;
-  if (!paused) gameState.elapsed += dt;
-  const progress = Math.min(1, gameState.elapsed/gameState.duration);
-  const phase = phaseFor(progress);
+  const delta = Math.min(.04, (now - lastFrame) / 1000 || 0);
+  lastFrame = now;
+  if (!paused) gameState.elapsed += delta;
+
+  const progress = Math.min(1, gameState.elapsed / gameState.duration);
+  const phase = progress < .25 ? 0 : progress < .5 ? 1 : progress < .75 ? 2 : 3;
   phaseEl.textContent = phaseNames[phase];
+  phaseProgress.style.width = `${progress * 100}%`;
   timeEl.textContent = formatTime(Math.max(0, gameState.duration - gameState.elapsed));
 
   if (!paused) {
-    for (const c of gameState.coins) {
-      if (!c.active && !c.collected && gameState.elapsed >= c.spawnAt) c.active = true;
-      if (c.active && !c.collected && !c.missed) {
-        const phaseSpeed = gameState.speed * (1 + phase*.07);
-        c.z -= dt*phaseSpeed;
-        if (c.z < -.08) c.missed = true;
+    for (const coin of gameState.coins) {
+      if (!coin.active && !coin.collected && gameState.elapsed >= coin.spawnAt) coin.active = true;
+      if (coin.active && !coin.collected && !coin.missed) {
+        coin.z -= delta * gameState.speed * (1 + phase * .055);
+        if (coin.z < -.08) coin.missed = true;
       }
     }
-    if (gameState.elapsed >= gameState.duration) { finish(gameState.score >= 500); return; }
+    if (progress >= .76 && !gameState.interruptionDone) triggerInterruption();
+    if (gameState.elapsed >= gameState.duration) {
+      finish();
+      return;
+    }
   }
 
   drawTunnel(phase, gameState.elapsed);
-  const visible = gameState.coins.filter(c=>c.active&&!c.collected&&!c.missed).sort((a,b)=>b.z-a.z);
-  for (const c of visible) drawCoin(c);
+  gameState.coins
+    .filter(coin => coin.active && !coin.collected && !coin.missed)
+    .sort((a, b) => b.z - a.z)
+    .forEach(drawCoin);
 
   if (lastAction && lastAction.until > now) {
-    ctx.save(); ctx.globalAlpha=.45; ctx.strokeStyle='#d9ffff'; ctx.lineWidth=4;
-    const w=innerWidth,h=innerHeight,cx=w/2,cy=h*.52;
-    const x=cx+laneX[lastAction.dir]*w*.25, y=cy+laneY[lastAction.dir]*h*.24;
-    ctx.beginPath(); ctx.arc(x,y,34,0,Math.PI*2); ctx.stroke(); ctx.restore();
+    const centerX = innerWidth / 2;
+    const centerY = innerHeight * .51;
+    const x = centerX + laneX[lastAction.direction] * innerWidth * .22;
+    const y = centerY + laneY[lastAction.direction] * innerHeight * .2;
+    ctx.strokeStyle = 'rgba(255,248,236,.7)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(x, y, 32, 0, Math.PI * 2);
+    ctx.stroke();
   }
-  raf=requestAnimationFrame(frame);
+  raf = requestAnimationFrame(frame);
 }
 
-function formatTime(sec) { sec=Math.ceil(sec); return `${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`; }
-function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+function formatTime(seconds) {
+  const value = Math.ceil(seconds);
+  return `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
+}
 
-startBtn.addEventListener('click',()=>startGame(false));
-demoBtn.addEventListener('click',()=>startGame(true));
-quitBtn.addEventListener('click',()=>finish(gameState?.score>=500));
+function startAmbientAudio() {
+  if (!soundEnabled) return;
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) return;
+  if (!audioContext) {
+    audioContext = new AudioContext();
+    ambientGain = audioContext.createGain();
+    ambientGain.gain.value = 0;
+    ambientGain.connect(audioContext.destination);
+    [82, 123].forEach((frequency, index) => {
+      const oscillator = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      oscillator.type = index ? 'sine' : 'triangle';
+      oscillator.frequency.value = frequency;
+      gain.gain.value = index ? .22 : .3;
+      oscillator.connect(gain).connect(ambientGain);
+      oscillator.start();
+    });
+  }
+  audioContext.resume();
+  ambientGain.gain.setTargetAtTime(.022, audioContext.currentTime, .8);
+}
 
-// Demo local: flechas + espacio permiten probar sin teléfono.
-window.addEventListener('keydown',e=>{
-  if (!gameState || gameState.ended) return;
-  if (e.key==='ArrowLeft') registerJump('left');
-  if (e.key==='ArrowUp') registerJump('up');
-  if (e.key==='ArrowRight') registerJump('right');
-  if (e.key===' ') { paused=!paused; e.preventDefault(); }
-  if ((e.key==='i'||e.key==='I') && gameState.demo) triggerInterruption();
+function stopAmbientAudio() {
+  if (ambientGain && audioContext) ambientGain.gain.setTargetAtTime(0, audioContext.currentTime, .2);
+}
+
+function playPing(kind) {
+  if (!soundEnabled || !audioContext || !ambientGain) return;
+  const oscillator = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  oscillator.type = 'sine';
+  oscillator.frequency.value = [520, 610, 690][kind];
+  gain.gain.setValueAtTime(.045, audioContext.currentTime);
+  gain.gain.exponentialRampToValueAtTime(.001, audioContext.currentTime + .32);
+  oscillator.connect(gain).connect(audioContext.destination);
+  oscillator.start();
+  oscillator.stop(audioContext.currentTime + .34);
+}
+
+function updateSoundButtons() {
+  $$('.sound-toggle').forEach(button => {
+    button.setAttribute('aria-pressed', String(soundEnabled));
+    button.setAttribute('aria-label', soundEnabled ? 'Silenciar sonido' : 'Activar sonido');
+    const label = button.querySelector('span');
+    if (label) label.textContent = soundEnabled ? 'Silenciar sonido' : 'Activar sonido';
+  });
+}
+
+function updateMotionButtons() {
+  document.documentElement.classList.toggle('reduced-motion', reducedMotion);
+  $$('.motion-toggle').forEach(button => {
+    button.setAttribute('aria-pressed', String(reducedMotion));
+    button.setAttribute('aria-label', reducedMotion ? 'Usar movimiento normal' : 'Usar movimiento reducido');
+    const label = button.querySelector('span');
+    if (label) label.textContent = reducedMotion ? 'Movimiento reducido' : 'Movimiento normal';
+  });
+}
+
+$$('.sound-toggle').forEach(button => button.addEventListener('click', () => {
+  soundEnabled = !soundEnabled;
+  updateSoundButtons();
+  soundEnabled ? startAmbientAudio() : stopAmbientAudio();
+}));
+
+$$('.motion-toggle').forEach(button => button.addEventListener('click', () => {
+  reducedMotion = !reducedMotion;
+  updateMotionButtons();
+}));
+
+motionPreference.addEventListener?.('change', event => {
+  reducedMotion = event.matches;
+  updateMotionButtons();
 });
 
+function updateInstitutionHelp(value = institutionInput.value.trim()) {
+  $('#institutionHelp').textContent = value
+    ? `Apoyo en tu institución: ${value}.`
+    : 'Habla ahora con el facilitador o con psicología/tutoría de tu institución.';
+}
+
+$$('.support-toggle').forEach(button => button.addEventListener('click', () => {
+  updateInstitutionHelp(gameState?.institution);
+  supportWasPaused = paused;
+  if (gameState && !gameState.ended) paused = true;
+  supportDialog.showModal();
+}));
+
+supportDialog.addEventListener('close', () => {
+  if (gameState && !gameState.ended && !inInterruption) {
+    paused = supportWasPaused;
+    lastFrame = performance.now();
+  }
+});
+
+startBtn.addEventListener('click', () => showPractice(false));
+demoBtn.addEventListener('click', () => showPractice(true));
+pauseBtn.addEventListener('click', togglePause);
+quitBtn.addEventListener('click', finish);
+window.addEventListener('resize', resize);
+window.addEventListener('keydown', event => {
+  if (!gameState || gameState.ended || inInterruption || supportDialog.open) return;
+  if (event.key === 'ArrowLeft') registerGesture('left');
+  if (event.key === 'ArrowUp') registerGesture('up');
+  if (event.key === 'ArrowRight') registerGesture('right');
+  if (event.key === ' ') {
+    event.preventDefault();
+    togglePause();
+  }
+});
+
+resize();
+updateMotionButtons();
+updateSoundButtons();
+updateReadiness();
 createRoom();

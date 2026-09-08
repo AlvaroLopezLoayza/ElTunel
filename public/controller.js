@@ -1,108 +1,118 @@
-const $ = (s) => document.querySelector(s);
+const $ = selector => document.querySelector(selector);
 const codeInput = $('#codeInput');
 const joinBtn = $('#joinBtn');
 const joinError = $('#joinError');
 const joinPanel = $('#joinPanel');
 const controls = $('#controls');
-const validateBtn = $('#validateBtn');
 const pauseBtn = $('#pauseBtn');
 const actionStatus = $('#actionStatus');
-const meter = $('#validationMeter i');
 const status = $('#controllerStatus');
 const roomLabel = $('#controllerRoom');
 const jumpBtns = [...document.querySelectorAll('.jump-btn')];
 
 let room = '';
-let armedAction = null;
-let armedAt = 0;
-let raf = 0;
-const VALID_MS = 1000;
+let busy = false;
+let paused = false;
 
-async function post(path, body = {}) {
-  const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+async function request(path, options = {}) {
+  const res = await fetch(path, options);
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'No fue posible conectar');
+  if (!res.ok) throw new Error(data.error || 'No fue posible conectar.');
   return data;
 }
 
-joinBtn.addEventListener('click', async () => {
-  room = codeInput.value.replace(/\D/g, '').slice(0,4);
+function post(path, body = {}) {
+  return request(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+}
+
+function setConnected(connected) {
+  status.className = `status ${connected ? 'connected' : 'disconnected'}`;
+  status.textContent = connected ? 'Conectado' : 'Reconectando';
+}
+
+async function join() {
+  room = codeInput.value.replace(/\D/g, '').slice(0, 4);
   joinError.textContent = '';
-  if (room.length !== 4) { joinError.textContent = 'Ingresa un código de 4 dígitos.'; return; }
+  if (room.length !== 4) {
+    joinError.textContent = 'Escribe los cuatro dígitos de la sala.';
+    codeInput.focus();
+    return;
+  }
+
+  joinBtn.disabled = true;
+  joinBtn.textContent = 'CONECTANDO…';
   try {
     await post(`/api/rooms/${room}/join`);
     roomLabel.textContent = `Sala ${room}`;
     joinPanel.classList.add('hidden');
     controls.classList.remove('hidden');
+    setConnected(true);
     heartbeat();
-  } catch (e) { joinError.textContent = e.message; }
+  } catch (error) {
+    joinError.textContent = error.message;
+  } finally {
+    joinBtn.disabled = false;
+    joinBtn.textContent = 'CONECTAR';
+  }
+}
+
+joinBtn.addEventListener('click', join);
+codeInput.addEventListener('input', () => {
+  codeInput.value = codeInput.value.replace(/\D/g, '').slice(0, 4);
+  joinError.textContent = '';
+});
+codeInput.addEventListener('keydown', event => {
+  if (event.key === 'Enter') join();
 });
 
-codeInput.addEventListener('input', () => { codeInput.value = codeInput.value.replace(/\D/g, '').slice(0,4); });
+async function sendDirection(button) {
+  if (!room || busy) return;
+  busy = true;
+  jumpBtns.forEach(item => { item.disabled = true; });
+  const action = button.dataset.action;
+  const direction = action === 'left' ? 'Izquierda' : action === 'right' ? 'Derecha' : 'Arriba';
 
-function clearArm(message = 'Esperando salto…') {
-  armedAction = null;
-  validateBtn.disabled = true;
-  jumpBtns.forEach(b => b.classList.remove('armed'));
-  cancelAnimationFrame(raf);
-  meter.style.width = '0%';
-  actionStatus.textContent = message;
-}
-
-function animateMeter() {
-  if (!armedAction) return;
-  const elapsed = performance.now() - armedAt;
-  const pct = Math.max(0, 100 - (elapsed / VALID_MS) * 100);
-  meter.style.width = `${pct}%`;
-  if (elapsed >= VALID_MS) {
-    clearArm('Salto no validado: acción descartada.');
-    return;
-  }
-  raf = requestAnimationFrame(animateMeter);
-}
-
-jumpBtns.forEach(btn => btn.addEventListener('click', () => {
-  if (!room) return;
-  clearArm('');
-  armedAction = btn.dataset.action;
-  armedAt = performance.now();
-  btn.classList.add('armed');
-  validateBtn.disabled = false;
-  actionStatus.textContent = 'Valida el salto ahora.';
-  animateMeter();
-}));
-
-validateBtn.addEventListener('click', async () => {
-  if (!armedAction) return;
-  const elapsed = performance.now() - armedAt;
-  if (elapsed > VALID_MS) { clearArm('Salto fuera de ventana: acción descartada.'); return; }
-  const action = armedAction;
   try {
     await post(`/api/rooms/${room}/actions`, { action });
-    await post(`/api/rooms/${room}/actions`, { action: 'validate' });
-    navigator.vibrate?.(35);
-    clearArm(`Salto ${action === 'left' ? 'izquierda' : action === 'right' ? 'derecha' : 'arriba'} registrado.`);
+    navigator.vibrate?.(22);
+    button.classList.add('sent');
+    actionStatus.textContent = `${direction} registrada.`;
+    setTimeout(() => button.classList.remove('sent'), 260);
   } catch {
-    status.className = 'status disconnected';
-    status.textContent = 'Desconectado';
-    clearArm('No se pudo registrar la acción.');
+    setConnected(false);
+    actionStatus.textContent = 'No se registró. Comprueba la conexión.';
+  } finally {
+    busy = false;
+    jumpBtns.forEach(item => { item.disabled = false; });
   }
-});
+}
+
+jumpBtns.forEach(button => button.addEventListener('click', () => sendDirection(button)));
 
 pauseBtn.addEventListener('click', async () => {
-  try { await post(`/api/rooms/${room}/actions`, { action: 'pause' }); }
-  catch {}
+  try {
+    await post(`/api/rooms/${room}/actions`, { action: 'pause' });
+    paused = !paused;
+    pauseBtn.querySelector('span').textContent = paused ? 'REANUDAR EXPERIENCIA' : 'PAUSAR EXPERIENCIA';
+    actionStatus.textContent = paused ? 'Experiencia en pausa.' : 'Experiencia reanudada.';
+    navigator.vibrate?.(35);
+  } catch {
+    setConnected(false);
+    actionStatus.textContent = 'No se pudo cambiar la pausa.';
+  }
 });
 
 async function heartbeat() {
   if (!room) return;
   try {
-    await post(`/api/rooms/${room}/join`);
-    status.className = 'status connected';
-    status.textContent = 'Conectado';
+    await request(`/api/rooms/${room}/status`, { cache: 'no-store' });
+    setConnected(true);
   } catch {
-    status.className = 'status disconnected';
-    status.textContent = 'Desconectado';
+    setConnected(false);
   }
   setTimeout(heartbeat, 2200);
 }

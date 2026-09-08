@@ -4,7 +4,8 @@
   "private": true,
   "description": "Experiencia web interactiva EL TÚNEL",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test"
   },
   "engines": { "node": ">=18" }
 }
