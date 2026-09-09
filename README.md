@@ -28,10 +28,16 @@ npm test
 2. El participante y su acompañante ensayan izquierda, arriba y derecha.
 3. El participante responde con un paso, inclinación o micro-salto; el acompañante registra la misma dirección con un toque.
 4. El campo visual se estrecha gradualmente y algunas alternativas quedan fuera del foco frontal.
-5. La interrupción abre la perspectiva y revela que las alternativas continuaban allí.
-6. El facilitador conduce tres preguntas de cierre y presenta recursos de ayuda.
+5. Una moneda especial permite alcanzar la interrupción y abrir la perspectiva; si no se recoge, la secuencia no se activa.
+6. El recorrido termina con el puntaje, el top 10 y los recursos de ayuda.
 
-Todas las sesiones completan el recorrido. No existe un estado de derrota ni una puntuación mínima.
+Todas las sesiones completan el recorrido. No existe un estado de derrota ni una puntuación mínima. El puntaje normalizado ofrece hasta 1000 puntos por las alternativas descubiertas y 250 adicionales por la moneda de interrupción.
+
+## Scoreboard
+
+Los últimos 100 resultados se guardan en `data/scores.json`; el cierre muestra el top 10 y resalta el resultado actual. El archivo no se versiona y puede ubicarse en otra ruta con la variable de entorno `SCORES_FILE`.
+
+El servidor calcula el puntaje a partir del conteo de monedas, por lo que el navegador nunca envía un puntaje confiable. El facilitador puede borrar el ranking desde las opciones de configuración, después de una confirmación explícita.
 
 ## Seguridad y accesibilidad
 
@@ -39,7 +45,9 @@ Todas las sesiones completan el recorrido. No existe un estado de derrota ni una
 - El área debe estar despejada. El visor solo limita la visión periférica y siempre deja visibles el centro y el suelo.
 - La persona puede pausar o terminar cuando quiera y no tiene que compartir experiencias personales.
 - Existe un modo de movimiento reducido, activado automáticamente desde la preferencia del sistema y disponible también como control manual.
+- La velocidad del fondo puede ajustarse a 1×, 2× o 3× antes de comenzar; esto no modifica la velocidad ni la ventana de captura de las monedas.
 - El sonido es opcional, empieza apagado y se genera localmente con Web Audio.
+- Durante la interrupción, cualquier dirección del controlador móvil avanza el diálogo.
 - También puede probarse sin teléfono usando las flechas del teclado; la barra espaciadora pausa.
 
 Antes de utilizar la experiencia con estudiantes, los textos y el protocolo presencial deben ser revisados por el profesional de salud mental de la institución.

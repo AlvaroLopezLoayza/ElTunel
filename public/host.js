@@ -16,6 +16,7 @@ const quitBtn = $('#quitBtn');
 const pauseBtn = $('#pauseBtn');
 const canvas = $('#tunnelCanvas');
 const ctx = canvas.getContext('2d');
+const scoreEl = $('#score');
 const discoveredEl = $('#discovered');
 const timeEl = $('#time');
 const phaseEl = $('#phase');
@@ -25,6 +26,7 @@ const floatScore = $('#floatScore');
 const hint = $('#hint strong');
 const playerTag = $('#playerTag');
 const institutionInput = $('#institutionSupport');
+const clearScoreboardBtn = $('#clearScoreboard');
 const motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
 
 const laneX = { left: -0.62, up: 0, right: 0.62 };
@@ -49,6 +51,7 @@ let lastAction = null;
 let paused = false;
 let supportWasPaused = false;
 let inInterruption = false;
+let continueInterruption = null;
 let revealMode = false;
 let reducedMotion = motionPreference.matches;
 let soundEnabled = false;
@@ -120,7 +123,10 @@ function updateReadiness() {
 function handleEvent(event) {
   if (event.type !== 'action' || !gameState || gameState.ended) return;
   if (event.action === 'pause') return togglePause();
-  if (['left', 'up', 'right'].includes(event.action)) registerGesture(event.action);
+  if (['left', 'up', 'right'].includes(event.action)) {
+    if (inInterruption) return advanceInterruption();
+    registerGesture(event.action);
+  }
 }
 
 $$('.safety-check').forEach(check => check.addEventListener('change', updateReadiness));
@@ -178,28 +184,53 @@ function buildPlan(duration, difficulty) {
       });
     }
   }
+  const specialLanes = ['left', 'up', 'right'];
+  plan.push({
+    id: ++id,
+    phase: 3,
+    spawnAt: duration * .76,
+    lane: specialLanes[Math.floor(rand() * specialLanes.length)],
+    label: 'INTERRUPCIÓN',
+    kind: 3,
+    special: true,
+    z: 1,
+    active: false,
+    collected: false,
+    missed: false
+  });
   return plan.sort((a, b) => a.spawnAt - b.spawnAt);
+}
+
+function currentScore() {
+  if (!gameState) return 0;
+  return Math.round(gameState.discovered / gameState.total * 1000) + (gameState.specialCaptured ? 250 : 0);
 }
 
 function startGame(demo = false) {
   const duration = Number($('#duration').value);
   const difficulty = $('#difficulty').value;
+  const backgroundSpeed = Math.min(3, Math.max(1, Number($('#backgroundSpeed').value) || 3));
   const name = $('#playerName').value.trim();
   const institution = institutionInput.value.trim();
+  const coins = buildPlan(duration, difficulty);
   gameState = {
     duration,
     difficulty,
+    backgroundSpeed,
     name,
     institution,
     discovered: 0,
+    total: coins.filter(coin => !coin.special).length,
+    specialCaptured: false,
     elapsed: 0,
     ended: false,
     demo,
-    coins: buildPlan(duration, difficulty),
+    coins,
     speed: difficulty === 'easy' ? .23 : difficulty === 'hard' ? .31 : .27,
     interruptionDone: false
   };
 
+  scoreEl.textContent = '0';
   discoveredEl.textContent = '0';
   timeEl.textContent = formatTime(duration);
   phaseEl.textContent = phaseNames[0];
@@ -224,7 +255,10 @@ function registerGesture(direction) {
   if (!gameState || gameState.ended || paused || inInterruption) return;
   lastAction = { direction, until: performance.now() + 420 };
   const candidates = gameState.coins
-    .filter(coin => coin.active && !coin.collected && !coin.missed && coin.lane === direction && coin.z < .29 && coin.z > -.06)
+    .filter(coin => {
+      if (!coin.active || coin.collected || coin.missed || coin.lane !== direction) return false;
+      return coin.special ? coin.z < .38 && coin.z > -.12 : coin.z < .29 && coin.z > -.06;
+    })
     .sort((a, b) => a.z - b.z);
 
   if (!candidates.length) {
@@ -234,14 +268,27 @@ function registerGesture(direction) {
     }, 700);
     return;
   }
-  collectAlternative(candidates[0]);
+  collectAlternative(candidates.find(coin => coin.special) || candidates[0]);
 }
 
 function collectAlternative(coin) {
   coin.collected = true;
+  if (coin.special) {
+    gameState.specialCaptured = true;
+    scoreEl.textContent = currentScore();
+    floatScore.textContent = '+250 · INTERRUPCIÓN';
+    floatScore.classList.remove('pop');
+    void floatScore.offsetWidth;
+    floatScore.classList.add('pop');
+    playPing(3);
+    triggerInterruption();
+    return;
+  }
+  const previousScore = currentScore();
   gameState.discovered += 1;
+  scoreEl.textContent = currentScore();
   discoveredEl.textContent = gameState.discovered;
-  floatScore.textContent = 'ALTERNATIVA DESCUBIERTA';
+  floatScore.textContent = `+${currentScore() - previousScore}`;
   floatScore.classList.remove('pop');
   void floatScore.offsetWidth;
   floatScore.classList.add('pop');
@@ -259,8 +306,18 @@ function togglePause() {
   hint.textContent = paused ? 'La experiencia está en pausa.' : 'Muévete cuando una alternativa diga AHORA.';
 }
 
+function advanceInterruption() {
+  if (!continueInterruption) return;
+  const advance = continueInterruption;
+  continueInterruption = null;
+  advance();
+}
+
 function waitForContinue() {
-  return new Promise(resolve => $('#continueReflection').addEventListener('click', resolve, { once: true }));
+  return new Promise(resolve => {
+    continueInterruption = resolve;
+    $('#continueReflection').addEventListener('click', advanceInterruption, { once: true });
+  });
 }
 
 async function triggerInterruption() {
@@ -285,12 +342,14 @@ async function triggerInterruption() {
       <p class="eyebrow">${eyebrow} · ${index + 1}/${steps.length}</p>
       <h2>${title}</h2><p>${copy}</p>
       ${index === 1 ? '<div class="reveal-list"><span>HABLAR</span><span>ACOMPAÑAR</span><span>PEDIR AYUDA</span><span>ESCUCHAR</span></div>' : ''}
+      <p class="controller-continue">En el móvil, toca cualquier dirección para continuar.</p>
       <div class="overlay-actions"><button id="continueReflection" class="primary">${index === steps.length - 1 ? 'CONTINUAR EL RECORRIDO' : 'CONTINUAR'}</button></div>`;
     $('#continueReflection').focus();
     await waitForContinue();
   }
 
   overlay.classList.add('hidden');
+  continueInterruption = null;
   paused = false;
   inInterruption = false;
   revealMode = false;
@@ -299,7 +358,7 @@ async function triggerInterruption() {
   hint.textContent = 'Tu perspectiva se amplió. Continúa.';
 }
 
-function finish() {
+async function finish() {
   if (!gameState || gameState.ended) return;
   gameState.ended = true;
   cancelAnimationFrame(raf);
@@ -307,28 +366,100 @@ function finish() {
   game.inert = false;
   game.classList.add('hidden');
   overlay.classList.remove('hidden');
+  overlayCard.innerHTML = `
+    <p class="eyebrow">RECORRIDO COMPLETADO</p>
+    <h2>Guardando<br>tu puntaje…</h2>
+    <p role="status">Preparando el scoreboard.</p>`;
 
-  const unseen = [...new Set(gameState.coins.filter(coin => !coin.collected).map(coin => coin.label))].slice(0, 6);
-  const revealed = unseen.length ? unseen : alternatives.slice(0, 6);
+  const payload = {
+    alias: gameState.name,
+    discovered: gameState.discovered,
+    total: gameState.total,
+    specialCaptured: gameState.specialCaptured,
+    duration: gameState.duration,
+    difficulty: gameState.difficulty
+  };
+  let entry;
+  let leaderboard = [];
+  let saveMessage = '';
+
+  try {
+    if (gameState.demo) {
+      const data = await fetch('/api/scores', { cache: 'no-store' }).then(response => {
+        if (!response.ok) throw new Error();
+        return response.json();
+      });
+      leaderboard = data.scores;
+      entry = { ...payload, alias: gameState.name || 'Participante', score: currentScore() };
+      saveMessage = 'El modo de prueba no se guarda en el ranking.';
+    } else {
+      const response = await fetch('/api/scores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'No se pudo guardar el puntaje.');
+      entry = data.entry;
+      leaderboard = data.leaderboard;
+    }
+  } catch (error) {
+    entry = { ...payload, alias: gameState.name || 'Participante', score: currentScore() };
+    saveMessage = `${error.message || 'No se pudo guardar el puntaje.'} El resultado sigue visible en esta pantalla.`;
+  }
+
+  renderScoreboard(entry, leaderboard, saveMessage);
+}
+
+function renderScoreboard(entry, leaderboard, saveMessage) {
   const institution = gameState.institution
     ? escapeHtml(gameState.institution)
     : 'Habla ahora con el facilitador o con psicología/tutoría de tu institución.';
+  const currentInTop = leaderboard.some(item => item.current);
+  const rows = leaderboard.map(item => `
+    <tr class="${item.current ? 'current-result' : ''}">
+      <td><span class="rank-number">${item.rank}</span></td>
+      <th scope="row">${escapeHtml(item.alias)}</th>
+      <td>${item.discovered}/${item.total}</td>
+      <td><span class="special-badge ${item.specialCaptured ? 'reached' : ''}">${item.specialCaptured ? 'Alcanzada' : 'No alcanzada'}</span></td>
+      <td class="score-cell">${item.score}</td>
+    </tr>`).join('');
+  const currentResult = !currentInTop && entry.rank ? `
+    <div class="outside-result"><span>Tu resultado · puesto ${entry.rank}</span><strong>${escapeHtml(entry.alias)} · ${entry.score} puntos</strong></div>` : '';
+  const reflection = gameState.specialCaptured ? `
+    <details class="final-reflection">
+      <summary>Conversación final</summary>
+      <div class="debrief">
+        <p>NO HACE FALTA CONTAR ALGO PERSONAL</p>
+        <ol>
+          <li>¿Qué cambió cuando el campo de visión se hizo más estrecho?</li>
+          <li>¿Cómo ayudó la perspectiva de la persona que acompañaba?</li>
+          <li>¿Qué puede ayudarnos a ampliar la perspectiva fuera del juego?</li>
+        </ol>
+      </div>
+    </details>` : '';
 
   overlayCard.innerHTML = `
-    <p class="eyebrow">EL CAMPO SE ABRE</p>
-    <h2>Las alternativas<br>seguían ahí.</h2>
-    <p>Descubriste <strong>${gameState.discovered}</strong>. Estas son algunas de las que permanecían fuera del foco:</p>
-    <div class="reveal-list">${revealed.map(label => `<span>${label}</span>`).join('')}</div>
-    <div class="debrief">
-      <p>CONVERSACIÓN GUIADA · NO HACE FALTA CONTAR ALGO PERSONAL</p>
-      <ol>
-        <li>¿Qué cambió cuando el campo de visión se hizo más estrecho?</li>
-        <li>¿Cómo ayudó la perspectiva de la persona que acompañaba?</li>
-        <li>¿Qué puede ayudarnos a ampliar la perspectiva fuera del juego?</li>
-      </ol>
+    <p class="eyebrow">SCOREBOARD · RECORRIDO COMPLETADO</p>
+    <div class="result-layout">
+      <section class="current-score-card" aria-label="Resultado actual">
+        <small>TU PUNTAJE</small><strong>${entry.score}</strong><span>de 1250 puntos</span>
+        <div class="result-details"><span>${entry.discovered}/${entry.total} alternativas</span><span>${entry.specialCaptured ? 'Interrupción alcanzada' : 'Interrupción no alcanzada'}</span></div>
+        ${saveMessage ? `<p class="save-message" role="status">${escapeHtml(saveMessage)}</p>` : ''}
+      </section>
+      <section class="leaderboard-panel" aria-labelledby="scoreboardTitle">
+        <div class="leaderboard-heading"><div><small>CLASIFICACIÓN</small><h2 id="scoreboardTitle">Top 10</h2></div><span>${leaderboard.length} resultados visibles</span></div>
+        <div class="score-table-wrap">
+          <table class="score-table">
+            <thead><tr><th scope="col">#</th><th scope="col">Alias</th><th scope="col">Alternativas</th><th scope="col">Interrupción</th><th scope="col">Puntos</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="5">Todavía no hay puntajes guardados.</td></tr>'}</tbody>
+          </table>
+        </div>
+        ${currentResult}
+      </section>
     </div>
-    <div class="support-summary"><strong>AYUDA REAL</strong><p>${institution}</p><p>Línea 113, opción 5 · orientación psicológica gratuita, 24 horas.</p></div>
-    <p>No tienes que encontrar la salida a solas.</p>
+    ${reflection}
+    <div class="support-summary"><strong>AYUDA REAL</strong><p>${institution}</p><p>Línea 113, opción 5 · orientación psicológica gratuita, 24 horas.</p><a class="support-link" href="https://www.gob.pe/saludmental" target="_blank" rel="noreferrer">Ver Centros de Salud Mental Comunitaria</a></div>
     <div class="overlay-actions"><button id="again" class="primary">REPETIR RECORRIDO</button><button id="newPlayer" class="secondary">PREPARAR OTRA PERSONA</button></div>`;
 
   $('#again').addEventListener('click', () => startGame(gameState.demo));
@@ -338,6 +469,7 @@ function finish() {
     setup.classList.remove('hidden');
     gameState = null;
   });
+  $('#again').focus();
 }
 
 function resize() {
@@ -368,7 +500,7 @@ function drawTunnel(phase, elapsed) {
   ctx.save();
   ctx.translate(centerX, centerY);
   for (let index = 0; index < 13; index++) {
-    const travel = reducedMotion ? index / 13 : (index / 13 + elapsed * .035) % 1;
+    const travel = reducedMotion ? index / 13 : (index / 13 + elapsed * .035 * gameState.backgroundSpeed) % 1;
     const depth = travel * travel;
     const ringWidth = (66 + depth * width * .95) * opening;
     const ringHeight = (44 + depth * height * .8) * opening;
@@ -393,7 +525,7 @@ function drawTunnel(phase, elapsed) {
 
   const particleCount = 22;
   for (let index = 0; index < particleCount; index++) {
-    const drift = reducedMotion ? 0 : elapsed * (2 + index % 3);
+    const drift = reducedMotion ? 0 : elapsed * (2 + index % 3) * gameState.backgroundSpeed;
     const x = (index * 173 + drift) % (width + 80) - 40;
     const y = (index * 97 + Math.sin(index) * 40) % height;
     ctx.fillStyle = `rgba(236,246,232,${.05 + (index % 4) * .018})`;
@@ -430,7 +562,8 @@ function drawCoin(coin) {
   const height = innerHeight;
   const centerX = width / 2;
   const centerY = height * .51;
-  const approach = coin.z <= .29 ? 'AHORA' : coin.z <= .55 ? 'CERCA' : 'LEJOS';
+  const nowThreshold = coin.special ? .38 : .29;
+  const approach = coin.z <= nowThreshold ? 'AHORA' : coin.z <= .55 ? 'CERCA' : 'LEJOS';
   let x;
   let y;
   let radius;
@@ -438,7 +571,7 @@ function drawCoin(coin) {
   if (reducedMotion) {
     x = centerX + laneX[coin.lane] * width * .3;
     y = centerY + laneY[coin.lane] * height * .28;
-    radius = approach === 'AHORA' ? 34 : approach === 'CERCA' ? 27 : 21;
+    radius = (approach === 'AHORA' ? 34 : approach === 'CERCA' ? 27 : 21) + (coin.special ? 5 : 0);
   } else {
     const depth = 1 - coin.z;
     const scale = .16 + depth * 1.35;
@@ -450,10 +583,12 @@ function drawCoin(coin) {
   ctx.save();
   ctx.translate(x, y);
   ctx.shadowBlur = approach === 'AHORA' ? 30 : 16;
-  ctx.shadowColor = coin.kind === 0 ? '#b7f34a' : coin.kind === 1 ? '#ff8f78' : '#76ddd2';
-  ctx.fillStyle = coin.kind === 0 ? '#b7f34a' : coin.kind === 1 ? '#ff8f78' : '#76ddd2';
+  ctx.shadowColor = coin.special ? '#fff8ec' : coin.kind === 0 ? '#b7f34a' : coin.kind === 1 ? '#ff8f78' : '#76ddd2';
+  ctx.fillStyle = coin.special ? '#fff8ec' : coin.kind === 0 ? '#b7f34a' : coin.kind === 1 ? '#ff8f78' : '#76ddd2';
   ctx.beginPath();
-  if (coin.kind === 1) {
+  if (coin.special) {
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+  } else if (coin.kind === 1) {
     ctx.rotate(Math.PI / 4);
     ctx.roundRect(-radius * .72, -radius * .72, radius * 1.44, radius * 1.44, radius * .28);
   } else {
@@ -461,28 +596,43 @@ function drawCoin(coin) {
   }
   ctx.fill();
   ctx.shadowBlur = 0;
+  if (coin.special) {
+    ctx.strokeStyle = '#ff8f78';
+    ctx.lineWidth = Math.max(3, radius * .12);
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * .68, 0, Math.PI * 2);
+    ctx.stroke();
+  }
   ctx.strokeStyle = '#10201c';
   ctx.lineWidth = Math.max(2, radius * .09);
   ctx.beginPath();
-  ctx.moveTo(-radius * .28, 0);
-  ctx.lineTo(radius * .28, 0);
-  ctx.moveTo(0, -radius * .28);
-  ctx.lineTo(0, radius * .28);
+  if (coin.special) {
+    ctx.moveTo(-radius * .18, -radius * .28);
+    ctx.lineTo(-radius * .18, radius * .28);
+    ctx.moveTo(radius * .18, -radius * .28);
+    ctx.lineTo(radius * .18, radius * .28);
+  } else {
+    ctx.moveTo(-radius * .28, 0);
+    ctx.lineTo(radius * .28, 0);
+    ctx.moveTo(0, -radius * .28);
+    ctx.lineTo(0, radius * .28);
+  }
   ctx.stroke();
   ctx.restore();
 
-  if (coin.z <= .55) {
+  if (coin.z <= (coin.special ? .68 : .55)) {
     ctx.save();
     ctx.font = `800 ${approach === 'AHORA' ? 12 : 10}px system-ui`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const labelWidth = ctx.measureText(approach).width + 20;
+    const approachLabel = coin.special ? `INTERRUPCIÓN · ${approach}` : approach;
+    const labelWidth = ctx.measureText(approachLabel).width + 20;
     ctx.fillStyle = approach === 'AHORA' ? 'rgba(255,248,236,.96)' : 'rgba(7,20,22,.82)';
     ctx.beginPath();
     ctx.roundRect(x - labelWidth / 2, y - radius - 29, labelWidth, 21, 11);
     ctx.fill();
     ctx.fillStyle = approach === 'AHORA' ? '#071416' : '#fff8ec';
-    ctx.fillText(approach, x, y - radius - 18.5);
+    ctx.fillText(approachLabel, x, y - radius - 18.5);
     ctx.restore();
   }
 }
@@ -503,11 +653,10 @@ function frame(now) {
     for (const coin of gameState.coins) {
       if (!coin.active && !coin.collected && gameState.elapsed >= coin.spawnAt) coin.active = true;
       if (coin.active && !coin.collected && !coin.missed) {
-        coin.z -= delta * gameState.speed * (1 + phase * .055);
-        if (coin.z < -.08) coin.missed = true;
+        coin.z -= delta * gameState.speed * (1 + phase * .055) * (coin.special ? .7 : 1);
+        if (coin.z < (coin.special ? -.12 : -.08)) coin.missed = true;
       }
     }
-    if (progress >= .76 && !gameState.interruptionDone) triggerInterruption();
     if (gameState.elapsed >= gameState.duration) {
       finish();
       return;
@@ -571,7 +720,7 @@ function playPing(kind) {
   const oscillator = audioContext.createOscillator();
   const gain = audioContext.createGain();
   oscillator.type = 'sine';
-  oscillator.frequency.value = [520, 610, 690][kind];
+  oscillator.frequency.value = [520, 610, 690, 820][kind] || 520;
   gain.gain.setValueAtTime(.045, audioContext.currentTime);
   gain.gain.exponentialRampToValueAtTime(.001, audioContext.currentTime + .32);
   oscillator.connect(gain).connect(audioContext.destination);
@@ -631,6 +780,21 @@ supportDialog.addEventListener('close', () => {
   if (gameState && !gameState.ended && !inInterruption) {
     paused = supportWasPaused;
     lastFrame = performance.now();
+  }
+});
+
+clearScoreboardBtn.addEventListener('click', async () => {
+  if (!confirm('¿Borrar todos los puntajes guardados? Esta acción no se puede deshacer.')) return;
+  const scoreboardStatus = $('#scoreboardStatus');
+  clearScoreboardBtn.disabled = true;
+  try {
+    const response = await fetch('/api/scores', { method: 'DELETE' });
+    if (!response.ok) throw new Error();
+    scoreboardStatus.textContent = 'Scoreboard borrado. El próximo recorrido iniciará un ranking nuevo.';
+  } catch {
+    scoreboardStatus.textContent = 'No se pudo borrar el scoreboard. Intenta de nuevo.';
+  } finally {
+    clearScoreboardBtn.disabled = false;
   }
 });
 

@@ -49,11 +49,13 @@
         <label class="field">Apoyo de la institución <small>Opcional; aparecerá al finalizar.</small><input id="institutionSupport" maxlength="100" autocomplete="off" placeholder="Ej. Psicología, aula 204" /></label>
 
         <details class="experience-options">
-          <summary>Ajustar duración y ritmo</summary>
+          <summary>Ajustar duración, ritmo y fondo</summary>
           <div class="form-grid">
             <label class="field">Duración<select id="duration"><option value="120">2 minutos</option><option value="180" selected>3 minutos</option><option value="240">4 minutos</option></select></label>
             <label class="field">Ritmo<select id="difficulty"><option value="easy">Suave</option><option value="medium" selected>Equilibrado</option><option value="hard">Dinámico</option></select></label>
+            <label class="field">Velocidad del fondo<select id="backgroundSpeed"><option value="1">Suave · 1×</option><option value="2">Media · 2×</option><option value="3" selected>Rápida · 3×</option></select><small>Movimiento reducido siempre lo congela.</small></label>
           </div>
+          <div class="scoreboard-settings"><span id="scoreboardStatus" role="status">El ranking se guarda en esta computadora.</span><button id="clearScoreboard" class="danger-button" type="button">Borrar scoreboard</button></div>
         </details>
 
         <p id="readyMessage" class="ready-message" role="status">Completa las tres comprobaciones y conecta el controlador.</p>
@@ -66,7 +68,7 @@
   <main id="game" class="game-shell hidden" aria-label="Experiencia El Túnel">
     <canvas id="tunnelCanvas" aria-hidden="true"></canvas>
     <header class="game-bar glass-strip">
-      <div class="game-stat discover-stat"><small>ALTERNATIVAS DESCUBIERTAS</small><strong id="discovered">0</strong></div>
+      <div class="game-stat discover-stat"><small>PUNTAJE</small><strong id="score">0</strong><em><span id="discovered">0</span> alternativas</em></div>
       <div class="game-stat"><small>TIEMPO</small><strong id="time">03:00</strong></div>
       <div class="phase-stat"><small>RECORRIDO</small><strong id="phase">CAMPO ABIERTO</strong><div class="phase-track"><i id="phaseProgress"></i></div></div>
       <span id="gameConnection" class="status disconnected">Sin controlador</span>

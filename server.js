@@ -7,8 +7,92 @@ const url = require('url');
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || '0.0.0.0';
 const PUBLIC = path.join(__dirname, 'public');
+const SCORES_FILE = process.env.SCORES_FILE || path.join(__dirname, 'data', 'scores.json');
 
 const rooms = new Map();
+let scores = loadScores();
+
+function loadScores() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(SCORES_FILE, 'utf8'));
+    if (!Array.isArray(parsed) || parsed.some(entry => !isStoredScore(entry))) {
+      throw new Error('El archivo no contiene resultados válidos');
+    }
+    return parsed.slice(-100);
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    const backup = `${SCORES_FILE}.corrupt-${Date.now()}`;
+    try { fs.copyFileSync(SCORES_FILE, backup); } catch {}
+    console.warn(`Scoreboard ignorado: ${error.message}. Copia preservada en ${backup}`);
+    return [];
+  }
+}
+
+function saveScores() {
+  fs.mkdirSync(path.dirname(SCORES_FILE), { recursive: true });
+  const temporary = `${SCORES_FILE}.${process.pid}.tmp`;
+  try {
+    fs.writeFileSync(temporary, JSON.stringify(scores, null, 2), 'utf8');
+    fs.renameSync(temporary, SCORES_FILE);
+  } finally {
+    if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+  }
+}
+
+function calculateScore(entry) {
+  return Math.round(entry.discovered / entry.total * 1000) + (entry.specialCaptured ? 250 : 0);
+}
+
+function isStoredScore(entry) {
+  return entry
+    && typeof entry.alias === 'string'
+    && entry.alias.length > 0
+    && entry.alias.length <= 24
+    && Number.isInteger(entry.discovered)
+    && Number.isInteger(entry.total)
+    && entry.total >= 1
+    && entry.total <= 200
+    && entry.discovered >= 0
+    && entry.discovered <= entry.total
+    && typeof entry.specialCaptured === 'boolean'
+    && [120, 180, 240].includes(entry.duration)
+    && ['easy', 'medium', 'hard'].includes(entry.difficulty)
+    && typeof entry.createdAt === 'string'
+    && !Number.isNaN(Date.parse(entry.createdAt));
+}
+
+function rankedScores(currentEntry) {
+  const sorted = [...scores].sort((a, b) => calculateScore(b) - calculateScore(a) || b.createdAt.localeCompare(a.createdAt));
+  let rank = 0;
+  let previousScore = null;
+  return sorted.map(entry => {
+    const score = calculateScore(entry);
+    if (score !== previousScore) rank += 1;
+    previousScore = score;
+    return { ...entry, score, rank, ...(entry === currentEntry ? { current: true } : {}) };
+  });
+}
+
+function scoreEntry(body) {
+  if (Object.prototype.hasOwnProperty.call(body, 'score')) throw new Error('El puntaje lo calcula el servidor');
+  const alias = body.alias == null ? '' : body.alias;
+  const validDuration = [120, 180, 240].includes(body.duration);
+  const validDifficulty = ['easy', 'medium', 'hard'].includes(body.difficulty);
+  if (typeof alias !== 'string' || alias.length > 100) throw new Error('Alias inválido');
+  if (!Number.isInteger(body.discovered) || !Number.isInteger(body.total) || body.total < 1 || body.total > 200 || body.discovered < 0 || body.discovered > body.total) throw new Error('Conteo inválido');
+  if (typeof body.specialCaptured !== 'boolean' || !validDuration || !validDifficulty) throw new Error('Configuración inválida');
+  const normalizedAlias = alias.trim().slice(0, 24) || 'Participante';
+  const latestTimestamp = scores.reduce((latest, item) => Math.max(latest, Date.parse(item.createdAt)), 0);
+  return {
+    alias: normalizedAlias,
+    discovered: body.discovered,
+    total: body.total,
+    specialCaptured: body.specialCaptured,
+    duration: body.duration,
+    difficulty: body.difficulty,
+    createdAt: new Date(Math.max(Date.now(), latestTimestamp + 1)).toISOString()
+  };
+}
 
 function json(res, status, data) {
   const body = JSON.stringify(data);
@@ -106,6 +190,44 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { controllerUrls: controllerUrls() });
   }
 
+  if (req.method === 'GET' && pathname === '/api/scores') {
+    return json(res, 200, { scores: rankedScores().slice(0, 10), totalCount: scores.length });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/scores') {
+    try {
+      const entry = scoreEntry(await readBody(req));
+      const previous = scores;
+      scores = [...scores, entry].slice(-100);
+      try { saveScores(); }
+      catch (error) {
+        scores = previous;
+        console.error(`No se pudo guardar el puntaje: ${error.message}`);
+        return json(res, 500, { error: 'No se pudo guardar el puntaje' });
+      }
+      const ranking = rankedScores(entry);
+      return json(res, 201, {
+        entry: ranking.find(item => item.current),
+        leaderboard: ranking.slice(0, 10)
+      });
+    } catch (error) {
+      return json(res, 400, { error: error.message || 'Resultado inválido' });
+    }
+  }
+
+  if (req.method === 'DELETE' && pathname === '/api/scores') {
+    const previous = scores;
+    scores = [];
+    try {
+      saveScores();
+      return json(res, 200, { ok: true });
+    } catch (error) {
+      scores = previous;
+      console.error(`No se pudo borrar el scoreboard: ${error.message}`);
+      return json(res, 500, { error: 'No se pudo borrar el scoreboard' });
+    }
+  }
+
   const joinMatch = pathname.match(/^\/api\/rooms\/(\d{4})\/join$/);
   if (req.method === 'POST' && joinMatch) {
     const room = ensureRoom(joinMatch[1]);
@@ -174,4 +296,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server };
+module.exports = { server, rankedScores, scoreEntry };
